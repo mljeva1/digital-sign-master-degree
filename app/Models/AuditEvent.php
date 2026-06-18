@@ -21,7 +21,7 @@ final class AuditEvent extends Model
         return [
             'occurred_at' => 'datetime',
             'success' => 'boolean',
-            'metadata_json' => 'array',
+            'metadata' => 'array',
         ];
     }
 

@@ -22,6 +22,7 @@ final class Contract extends Model
     public const STATUS_FULLY_SIGNED = 'fully_signed';
     public const STATUS_CANCELLED = 'cancelled';
     public const STATUS_EXPIRED = 'expired';
+    public const STATUS_ARCHIVED = 'archived';
 
     protected $guarded = [
         'id',

@@ -41,9 +41,39 @@
                 <a href="#data-model" class="text-sm font-medium text-slate-300 transition hover:text-white">Model podataka</a>
             </div>
 
-            <a href="#demo" class="hidden rounded-full border border-white/10 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:border-cyan-300/40 hover:bg-cyan-300/10 md:inline-flex">
-                Pregled sustava
-            </a>
+            {{-- auth --}}
+            <div class="hidden items-center gap-3 md:flex">
+                @guest
+                    <button
+                        type="button"
+                        data-auth-open="login"
+                        class="rounded-full border border-white/10 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:border-cyan-300/40 hover:bg-cyan-300/10"
+                    >
+                        Prijava
+                    </button>
+
+                    <button
+                        type="button"
+                        data-auth-open="register"
+                        class="rounded-full bg-cyan-300 px-5 py-2.5 text-sm font-bold text-slate-950 shadow-sm transition hover:bg-cyan-200"
+                    >
+                        Registracija
+                    </button>
+                @endguest
+
+                @auth
+                    <a href="{{ route('dashboard') }}" class="rounded-full bg-cyan-300 px-5 py-2.5 text-sm font-bold text-slate-950 shadow-sm transition hover:bg-cyan-200">
+                        Dashboard
+                    </a>
+
+                    <form method="POST" action="{{ route('logout') }}">
+                        @csrf
+                        <button type="submit" class="rounded-full border border-white/10 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:border-red-300/40 hover:bg-red-300/10">
+                            Odjava
+                        </button>
+                    </form>
+                @endauth
+            </div>
         </nav>
     </header>
 
@@ -66,16 +96,38 @@
                     </p>
 
                     <div class="mt-10 flex flex-col gap-3 sm:flex-row">
-                        <a href="#workflow" class="inline-flex items-center justify-center rounded-full bg-cyan-300 px-6 py-3 text-sm font-bold text-slate-950 shadow-2xl shadow-cyan-950/30 transition hover:bg-cyan-200">
-                            Pregled workflowa
+                    @guest
+                        <button
+                            type="button"
+                            data-auth-open="login"
+                            class="inline-flex items-center justify-center rounded-full bg-cyan-300 px-6 py-3 text-sm font-bold text-slate-950 shadow-2xl shadow-cyan-950/30 transition hover:bg-cyan-200"
+                        >
+                            Uđi u sustav
                             <svg viewBox="0 0 20 20" aria-hidden="true" class="ml-2 h-4 w-4">
                                 <path fill="currentColor" d="M12.293 4.293a1 1 0 0 1 1.414 0l5 5a1 1 0 0 1 0 1.414l-5 5a1 1 0 1 1-1.414-1.414L15.586 11H2a1 1 0 1 1 0-2h13.586l-3.293-3.293a1 1 0 0 1 0-1.414Z"/>
                             </svg>
+                        </button>
+
+                        <button
+                            type="button"
+                            data-auth-open="register"
+                            class="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-6 py-3 text-sm font-bold text-white transition hover:border-white/20 hover:bg-white/10"
+                        >
+                            Kreiraj račun
+                        </button>
+                    @endguest
+
+                    @auth
+                        <a href="{{ route('dashboard') }}" class="inline-flex items-center justify-center rounded-full bg-cyan-300 px-6 py-3 text-sm font-bold text-slate-950 shadow-2xl shadow-cyan-950/30 transition hover:bg-cyan-200">
+                            Otvori dashboard
                         </a>
-                        <a href="#security" class="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-6 py-3 text-sm font-bold text-white transition hover:border-white/20 hover:bg-white/10">
-                            Sigurnosni sloj
+
+                        <a href="#workflow" class="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-6 py-3 text-sm font-bold text-white transition hover:border-white/20 hover:bg-white/10">
+                            Pregled workflowa
                         </a>
-                    </div>
+                    @endauth
+                </div>
+                    
 
                     <dl class="mt-12 grid max-w-2xl grid-cols-3 gap-3">
                         <div class="rounded-3xl border border-white/10 bg-white/[0.04] p-4">
@@ -356,5 +408,272 @@
             <p class="text-slate-400">Laravel · PostgreSQL · Tailwind CSS · Audit-first architecture</p>
         </div>
     </footer>
+
+    @guest
+    <div
+        id="authModal"
+        class="fixed inset-0 z-[100] hidden items-center justify-center px-4 py-8"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="authModalTitle"
+        >
+            <div
+                data-auth-close
+                class="absolute inset-0 bg-slate-950/80 backdrop-blur-md"
+                aria-hidden="true"
+            ></div>
+
+            <div class="relative max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-[2rem] border border-white/10 bg-slate-900/95 p-6 shadow-2xl shadow-slate-950/80 sm:p-8">
+                <button
+                    type="button"
+                    data-auth-close
+                    class="absolute right-5 top-5 rounded-full border border-white/10 bg-white/5 p-2 text-slate-300 transition hover:bg-white/10 hover:text-white"
+                    aria-label="Zatvori modal"
+                >
+                    <svg viewBox="0 0 20 20" class="h-5 w-5" aria-hidden="true">
+                        <path fill="currentColor" d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L8.94 10l-4.72 4.72a.75.75 0 1 0 1.06 1.06L10 11.06l4.72 4.72a.75.75 0 1 0 1.06-1.06L11.06 10l4.72-4.72a.75.75 0 0 0-1.06-1.06L10 8.94 5.28 4.22Z"/>
+                    </svg>
+                </button>
+
+                <div class="mb-6 pr-10">
+                    <p class="text-sm font-semibold uppercase tracking-[0.28em] text-cyan-200">Siguran pristup</p>
+                    <h2 id="authModalTitle" class="mt-3 text-3xl font-semibold tracking-tight text-white">
+                        Pristup sustavu
+                    </h2>
+                    <p class="mt-3 text-sm leading-6 text-slate-400">
+                        Prijavi se postojećim računom ili napravi novi korisnički račun za pristup dashboardu.
+                    </p>
+                </div>
+
+                @if (session('success'))
+                    <div class="mb-5 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm text-emerald-100">
+                        {{ session('success') }}
+                    </div>
+                @endif
+
+                @if ($errors->any())
+                    <div class="mb-5 rounded-2xl border border-red-300/20 bg-red-300/10 px-4 py-3 text-sm text-red-100">
+                        <p class="font-semibold">Provjeri unesene podatke:</p>
+                        <ul class="mt-2 list-inside list-disc space-y-1">
+                            @foreach ($errors->all() as $error)
+                                <li>{{ $error }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
+
+                <div class="mb-6 grid grid-cols-2 rounded-full border border-white/10 bg-slate-950/70 p-1">
+                    <button
+                        type="button"
+                        data-auth-tab="login"
+                        class="rounded-full px-4 py-2.5 text-sm font-semibold transition"
+                    >
+                        Prijava
+                    </button>
+
+                    <button
+                        type="button"
+                        data-auth-tab="register"
+                        class="rounded-full px-4 py-2.5 text-sm font-semibold transition"
+                    >
+                        Registracija
+                    </button>
+                </div>
+
+                <div data-auth-panel="login">
+                    <form method="POST" action="{{ route('login.store') }}" class="space-y-5">
+                        @csrf
+
+                        <input type="hidden" name="auth_form" value="login">
+
+                        <div>
+                            <label for="login_email" class="block text-sm font-medium text-slate-200">Email</label>
+                            <input
+                                id="login_email"
+                                name="email"
+                                type="email"
+                                value="{{ old('auth_form') === 'login' ? old('email') : '' }}"
+                                required
+                                autocomplete="email"
+                                class="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-300/50 focus:ring-2 focus:ring-cyan-300/20"
+                                placeholder="ime@primjer.hr"
+                            >
+                        </div>
+
+                        <div>
+                            <label for="login_password" class="block text-sm font-medium text-slate-200">Lozinka</label>
+                            <input
+                                id="login_password"
+                                name="password"
+                                type="password"
+                                required
+                                autocomplete="current-password"
+                                class="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-300/50 focus:ring-2 focus:ring-cyan-300/20"
+                                placeholder="Unesi lozinku"
+                            >
+                        </div>
+
+                        <label class="flex items-center gap-3 text-sm text-slate-300">
+                            <input
+                                type="checkbox"
+                                name="remember"
+                                value="1"
+                                class="h-4 w-4 rounded border-white/10 bg-slate-950 text-cyan-300"
+                            >
+                            Zapamti me
+                        </label>
+
+                        <button type="submit" class="w-full rounded-full bg-cyan-300 px-6 py-3 text-sm font-bold text-slate-950 shadow-lg shadow-cyan-950/30 transition hover:bg-cyan-200">
+                            Prijavi se
+                        </button>
+                    </form>
+                </div>
+
+                <div data-auth-panel="register" class="hidden">
+                    <form method="POST" action="{{ route('register.store') }}" class="space-y-5">
+                        @csrf
+
+                        <input type="hidden" name="auth_form" value="register">
+
+                        <div>
+                            <label for="register_name" class="block text-sm font-medium text-slate-200">Ime i prezime</label>
+                            <input
+                                id="register_name"
+                                name="name"
+                                type="text"
+                                value="{{ old('auth_form') === 'register' ? old('name') : '' }}"
+                                required
+                                autocomplete="name"
+                                class="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-300/50 focus:ring-2 focus:ring-emerald-300/20"
+                                placeholder="Mateo Ljevar"
+                            >
+                        </div>
+
+                        <div>
+                            <label for="register_email" class="block text-sm font-medium text-slate-200">Email</label>
+                            <input
+                                id="register_email"
+                                name="email"
+                                type="email"
+                                value="{{ old('auth_form') === 'register' ? old('email') : '' }}"
+                                required
+                                autocomplete="email"
+                                class="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-300/50 focus:ring-2 focus:ring-emerald-300/20"
+                                placeholder="ime@primjer.hr"
+                            >
+                        </div>
+
+                        <div>
+                            <label for="register_password" class="block text-sm font-medium text-slate-200">Lozinka</label>
+                            <input
+                                id="register_password"
+                                name="password"
+                                type="password"
+                                required
+                                autocomplete="new-password"
+                                class="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-300/50 focus:ring-2 focus:ring-emerald-300/20"
+                                placeholder="Minimalno 8 znakova"
+                            >
+                        </div>
+
+                        <div>
+                            <label for="register_password_confirmation" class="block text-sm font-medium text-slate-200">Potvrda lozinke</label>
+                            <input
+                                id="register_password_confirmation"
+                                name="password_confirmation"
+                                type="password"
+                                required
+                                autocomplete="new-password"
+                                class="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-300/50 focus:ring-2 focus:ring-emerald-300/20"
+                                placeholder="Ponovi lozinku"
+                            >
+                        </div>
+
+                        <button type="submit" class="w-full rounded-full bg-emerald-300 px-6 py-3 text-sm font-bold text-slate-950 shadow-lg shadow-emerald-950/30 transition hover:bg-emerald-200">
+                            Registriraj se
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    @endguest
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const modal = document.getElementById('authModal');
+
+            if (! modal) {
+                return;
+            }
+
+            const openButtons = document.querySelectorAll('[data-auth-open]');
+            const closeButtons = document.querySelectorAll('[data-auth-close]');
+            const tabButtons = document.querySelectorAll('[data-auth-tab]');
+            const panels = document.querySelectorAll('[data-auth-panel]');
+
+            const activeTabClasses = ['bg-cyan-300', 'text-slate-950', 'shadow-sm'];
+            const inactiveTabClasses = ['text-slate-300', 'hover:bg-white/5', 'hover:text-white'];
+
+            const setTab = (tabName) => {
+                tabButtons.forEach((button) => {
+                    const isActive = button.dataset.authTab === tabName;
+
+                    button.classList.remove(...activeTabClasses, ...inactiveTabClasses);
+                    button.classList.add(...(isActive ? activeTabClasses : inactiveTabClasses));
+                });
+
+                panels.forEach((panel) => {
+                    panel.classList.toggle('hidden', panel.dataset.authPanel !== tabName);
+                });
+            };
+
+            const openModal = (tabName = 'login') => {
+                setTab(tabName);
+
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+
+                document.body.classList.add('overflow-hidden');
+
+                const firstInput = modal.querySelector(`[data-auth-panel="${tabName}"] input:not([type="hidden"])`);
+
+                if (firstInput) {
+                    setTimeout(() => firstInput.focus(), 50);
+                }
+            };
+
+            const closeModal = () => {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+
+                document.body.classList.remove('overflow-hidden');
+            };
+
+            openButtons.forEach((button) => {
+                button.addEventListener('click', () => openModal(button.dataset.authOpen));
+            });
+
+            closeButtons.forEach((button) => {
+                button.addEventListener('click', closeModal);
+            });
+
+            tabButtons.forEach((button) => {
+                button.addEventListener('click', () => setTab(button.dataset.authTab));
+            });
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && ! modal.classList.contains('hidden')) {
+                    closeModal();
+                }
+            });
+
+            const initialModal = @json(old('auth_form') ?: session('auth_modal'));
+
+            if (initialModal === 'login' || initialModal === 'register') {
+                openModal(initialModal);
+            } else {
+                setTab('login');
+            }
+        });
+    </script>
 </body>
 </html>

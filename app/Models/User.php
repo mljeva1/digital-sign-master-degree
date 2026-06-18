@@ -11,6 +11,11 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
+use App\Models\Role;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use InvalidArgumentException;
+
 #[Fillable(['name', 'email', 'password'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
@@ -78,10 +83,12 @@ class User extends Authenticatable
         return $this->hasMany(ContractDocument::class, 'generated_by');
     }
 
-    public function hasRole(string $roleName): bool
+    public function hasRole(string|array $roles): bool
     {
+        $roles = is_array($roles) ? $roles : [$roles];
+
         return $this->roles()
-            ->where('name', $roleName)
+            ->whereIn('roles.name', $roles)
             ->exists();
     }
 
@@ -108,5 +115,42 @@ class User extends Authenticatable
     public function sourceContractParties(): HasMany
     {
         return $this->hasMany(ContractParty::class, 'source_user_id');
+    }
+
+    public function assignRole(string $roleName): void
+    {
+        $roleId = Role::query()
+            ->where('name', $roleName)
+            ->value('id');
+
+        if (! $roleId) {
+            throw new InvalidArgumentException("Uloga '{$roleName}' ne postoji.");
+        }
+
+        $alreadyAssigned = DB::table('role_user')
+            ->where('user_id', $this->id)
+            ->where('role_id', $roleId)
+            ->exists();
+
+        if ($alreadyAssigned) {
+            return;
+        }
+
+        $now = now();
+
+        $pivotData = [
+            'user_id' => $this->id,
+            'role_id' => $roleId,
+        ];
+
+        if (Schema::hasColumn('role_user', 'created_at')) {
+            $pivotData['created_at'] = $now;
+        }
+
+        if (Schema::hasColumn('role_user', 'updated_at')) {
+            $pivotData['updated_at'] = $now;
+        }
+
+        DB::table('role_user')->insert($pivotData);
     }
 }
