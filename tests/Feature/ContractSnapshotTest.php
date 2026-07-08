@@ -18,6 +18,7 @@ class ContractSnapshotTest extends TestCase
         parent::setUp();
 
         Schema::dropIfExists('audit_events');
+        Schema::dropIfExists('signatures');
         Schema::dropIfExists('contracts');
         Schema::dropIfExists('files');
         Schema::dropIfExists('users');
@@ -91,11 +92,32 @@ class ContractSnapshotTest extends TestCase
             $table->json('metadata')->nullable();
             $table->timestamps();
         });
+
+        Schema::create('signatures', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('contract_id');
+            $table->unsignedBigInteger('contract_party_id')->nullable();
+            $table->unsignedBigInteger('certificate_id')->nullable();
+            $table->unsignedBigInteger('signed_user_id')->nullable();
+            $table->unsignedBigInteger('signed_customer_id')->nullable();
+            $table->string('type', 30)->default('digital');
+            $table->string('status', 20);
+            $table->timestamp('signed_at')->nullable();
+            $table->string('document_hash_before', 64);
+            $table->string('document_hash_after', 64)->nullable();
+            $table->string('signature_reason')->nullable();
+            $table->string('signature_location')->nullable();
+            $table->unsignedBigInteger('signature_file_id')->nullable();
+            $table->string('ip_address')->nullable();
+            $table->string('user_agent')->nullable();
+            $table->timestamps();
+        });
     }
 
     protected function tearDown(): void
     {
         Schema::dropIfExists('audit_events');
+        Schema::dropIfExists('signatures');
         Schema::dropIfExists('contracts');
         Schema::dropIfExists('files');
         Schema::dropIfExists('users');

@@ -105,6 +105,15 @@ final class Contract extends Model
         return $this->hasMany(Signature::class);
     }
 
+    public function cryptographicSignatures(): HasMany
+    {
+        return $this->hasMany(Signature::class)
+            ->whereNotNull('signature_file_id')
+            ->whereHas('signatureFile', function ($query): void {
+                $query->where('purpose', StoredFile::PURPOSE_CMS_SIGNATURE);
+            });
+    }
+
     public function documents(): HasMany
     {
         return $this->hasMany(ContractDocument::class);
@@ -187,5 +196,12 @@ final class Contract extends Model
     public function canBeEdited(): bool
     {
         return $this->isDraft() && ! $this->isLocked();
+    }
+
+    public function hasCryptographicSignature(): bool
+    {
+        return $this->cryptographicSignatures()
+            ->where('status', Signature::STATUS_COMPLETED)
+            ->exists();
     }
 }

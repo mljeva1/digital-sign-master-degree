@@ -15,8 +15,11 @@ final class Signature extends Model
     public const TYPE_DIGITAL = 'digital';
 
     public const STATUS_PENDING = 'pending';
+
     public const STATUS_COMPLETED = 'completed';
+
     public const STATUS_REJECTED = 'rejected';
+
     public const STATUS_EXPIRED = 'expired';
 
     protected $guarded = [
@@ -43,6 +46,11 @@ final class Signature extends Model
     public function certificate(): BelongsTo
     {
         return $this->belongsTo(Certificate::class);
+    }
+
+    public function signatureFile(): BelongsTo
+    {
+        return $this->belongsTo(StoredFile::class, 'signature_file_id');
     }
 
     public function signedUser(): BelongsTo

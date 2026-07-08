@@ -23,6 +23,8 @@ final class StoredFile extends Model
 
     public const PURPOSE_CERTIFICATE = 'certificate';
 
+    public const PURPOSE_CMS_SIGNATURE = 'cms_signature';
+
     public const PURPOSE_IDENTITY_CAPTURE = 'identity_capture';
 
     public const DISK_LOCAL = 'local';
@@ -104,6 +106,6 @@ final class StoredFile extends Model
 
     public function storageReference(): string
     {
-        return $this->storage_disk . ':' . $this->storage_path;
+        return $this->storage_disk.':'.$this->storage_path;
     }
 }

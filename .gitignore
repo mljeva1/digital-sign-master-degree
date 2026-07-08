@@ -25,3 +25,22 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
+master-degree-obsidian/.obsidian/
+master-degree-obsidian/node_modules/
+.claude/settings.local.json
+
+# Local CMS/X.509 signing material — never committed
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cer
+*.csr
+*.p7s
+*.p7m
+*.p7b
+*.p7c
+*.cms
+*.der
+/storage/signing/
