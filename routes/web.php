@@ -3,9 +3,13 @@
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ContractController;
 use App\Http\Controllers\DocumentController;
+use App\Http\Controllers\PublicContractVerificationController;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'welcome')->name('home');
+
+Route::get('/verify/contracts/{token}', [PublicContractVerificationController::class, 'show'])
+    ->name('public.contracts.verify.show');
 
 Route::get('/login', function () {
     return redirect()
@@ -77,6 +81,24 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/contracts/{contract}/draft-pdf/verify', [ContractController::class, 'verifyDraftPdf'])
         ->name('contracts.draft-pdf.verify');
+
+    Route::post('/contracts/{contract}/final-pdf', [ContractController::class, 'generateFinalPdf'])
+        ->name('contracts.final-pdf.store');
+
+    Route::get('/contracts/{contract}/final-pdf', [ContractController::class, 'showFinalPdf'])
+        ->name('contracts.final-pdf.show');
+
+    Route::get('/contracts/{contract}/final-pdf/verify', [ContractController::class, 'verifyFinalPdf'])
+        ->name('contracts.final-pdf.verify');
+
+    Route::post('/contracts/{contract}/public-verification', [ContractController::class, 'enablePublicVerification'])
+        ->name('contracts.public-verification.enable');
+
+    Route::get('/contracts/{contract}/validate-required-fields', [ContractController::class, 'validateRequiredFields'])
+        ->name('contracts.required-fields.validate');
+
+    Route::post('/contracts/{contract}/finalize', [ContractController::class, 'finalize'])
+        ->name('contracts.finalize.store');
 
     Route::post('/contracts/snapshot', [ContractController::class, 'storeSnapshot'])
         ->name('contracts.snapshot.store');

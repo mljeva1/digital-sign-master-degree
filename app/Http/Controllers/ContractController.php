@@ -6,6 +6,8 @@ use App\Models\AuditEvent;
 use App\Models\Contract;
 use App\Models\StoredFile;
 use App\Services\Audit\AuditLogger;
+use App\Services\Contracts\ContractRequiredFieldsValidator;
+use App\Services\Contracts\FinalPdfGenerator;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -20,15 +22,19 @@ use Illuminate\View\View;
 class ContractController extends Controller
 {
     public function __construct(
-        private readonly AuditLogger $auditLogger
+        private readonly AuditLogger $auditLogger,
+        private readonly FinalPdfGenerator $finalPdfGenerator
     ) {}
 
     public function index(Request $request): View
     {
         $contracts = Contract::query()
-            ->with('draftPdfFile')
+            ->with(['draftPdfFile', 'finalPdfFile'])
             ->where('created_by_user_id', $request->user()->id)
-            ->where('status', Contract::STATUS_DRAFT)
+            ->whereIn('status', [
+                Contract::STATUS_DRAFT,
+                Contract::STATUS_FINALIZED,
+            ])
             ->orderByDesc('updated_at')
             ->get();
 
@@ -214,6 +220,213 @@ class ContractController extends Controller
         ]);
     }
 
+    public function generateFinalPdf(Request $request, Contract $contract): RedirectResponse
+    {
+        abort_unless($contract->created_by_user_id === $request->user()->id, 403);
+
+        $this->finalPdfGenerator->generate($contract, $request->user()->id);
+
+        return redirect()
+            ->route('contracts.index')
+            ->with('success', 'Finalni PDF je generiran.');
+    }
+
+    public function enablePublicVerification(
+        Request $request,
+        Contract $contract
+    ): RedirectResponse {
+        abort_unless($contract->created_by_user_id === $request->user()->id, 403);
+        abort_unless($contract->isFinalized(), 403);
+        abort_unless($contract->isLocked(), 403);
+
+        $tokenCreated = blank($contract->public_verification_token);
+        $finalPdfRegenerated = $contract->hasFinalPdf();
+
+        DB::transaction(function () use (
+            $request,
+            $contract,
+            $tokenCreated,
+            $finalPdfRegenerated
+        ): void {
+            if ($tokenCreated) {
+                do {
+                    $token = Str::random(64);
+                } while (Contract::query()
+                    ->where('public_verification_token', $token)
+                    ->exists());
+
+                $contract->public_verification_token = $token;
+            }
+
+            $contract->public_verification_enabled_at ??= now();
+            $contract->public_verification_revoked_at = null;
+            $contract->save();
+
+            $this->finalPdfGenerator->generate(
+                $contract,
+                $request->user()->id,
+                'public_verification'
+            );
+
+            $this->auditLogger->record('contract.public_verification_enabled', $contract, [
+                'public_verification_token_created' => $tokenCreated,
+                'enabled_at' => $contract->public_verification_enabled_at?->toIso8601String(),
+                'route_name' => 'contracts.public-verification.enable',
+                'final_pdf_regenerated' => $finalPdfRegenerated,
+            ]);
+        });
+
+        return redirect()
+            ->route('contracts.index')
+            ->with('success', 'Javna provjera dokumenta je omogućena.');
+    }
+
+    public function showFinalPdf(Request $request, Contract $contract): Response
+    {
+        $storedFile = $this->resolveAccessibleFinalPdf($request, $contract);
+        $content = Storage::disk(StoredFile::DISK_LOCAL)->get($storedFile->storage_path);
+        $filename = basename(
+            $storedFile->original_filename ?: "contract-{$contract->id}-final.pdf"
+        );
+        $filename = str_replace(["\r", "\n", '"'], '', $filename);
+
+        $this->auditLogger->record('contract.final_pdf_viewed', $contract, [
+            'file_id' => $storedFile->id,
+            'purpose' => $storedFile->purpose,
+            'viewed_at' => now()->toIso8601String(),
+        ]);
+
+        return response($content, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="'.$filename.'"',
+            'Content-Length' => (string) strlen($content),
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
+    public function verifyFinalPdf(Request $request, Contract $contract): JsonResponse
+    {
+        $storedFile = $this->resolveAccessibleFinalPdf($request, $contract);
+        abort_if(blank($contract->final_pdf_sha256), 404);
+
+        $storedSha256 = strtolower($contract->final_pdf_sha256);
+        $actualSha256 = hash(
+            'sha256',
+            Storage::disk(StoredFile::DISK_LOCAL)->get($storedFile->storage_path)
+        );
+        $valid = hash_equals($storedSha256, $actualSha256);
+
+        $this->auditLogger->record('contract.final_pdf_verified', $contract, [
+            'valid' => $valid,
+            'stored_sha256' => $storedSha256,
+            'actual_sha256' => $actualSha256,
+            'verified_at' => now()->toIso8601String(),
+        ]);
+
+        return response()->json([
+            'valid' => $valid,
+            'stored_sha256' => $storedSha256,
+            'actual_sha256' => $actualSha256,
+        ]);
+    }
+
+    public function validateRequiredFields(
+        Request $request,
+        Contract $contract,
+        ContractRequiredFieldsValidator $requiredFieldsValidator
+    ): JsonResponse {
+        abort_unless($contract->created_by_user_id === $request->user()->id, 403);
+        abort_unless($contract->canBeEdited(), 403);
+
+        $result = $requiredFieldsValidator->validate($contract->filled_data_snapshot ?? []);
+
+        $this->auditLogger->record('contract.required_fields_validated', $contract, [
+            'valid' => $result['valid'],
+            'missing_fields' => array_column($result['missing_fields'], 'key'),
+            'invalid_fields' => array_column($result['invalid_fields'], 'key'),
+        ]);
+
+        return response()->json($result);
+    }
+
+    public function finalize(
+        Request $request,
+        Contract $contract,
+        ContractRequiredFieldsValidator $requiredFieldsValidator
+    ): JsonResponse {
+        abort_unless($contract->created_by_user_id === $request->user()->id, 403);
+
+        $result = DB::transaction(function () use (
+            $request,
+            $contract,
+            $requiredFieldsValidator
+        ): array {
+            $lockedContract = Contract::query()
+                ->lockForUpdate()
+                ->findOrFail($contract->id);
+
+            abort_unless($lockedContract->created_by_user_id === $request->user()->id, 403);
+            abort_unless($lockedContract->canBeEdited(), 403);
+
+            $snapshot = $lockedContract->filled_data_snapshot ?? [];
+            $validation = $requiredFieldsValidator->validate($snapshot);
+
+            if (! $validation['valid']) {
+                $this->auditLogger->record('contract.finalization_failed', $lockedContract, [
+                    'valid' => false,
+                    'missing_fields' => array_column($validation['missing_fields'], 'key'),
+                    'invalid_fields' => array_column($validation['invalid_fields'], 'key'),
+                ]);
+
+                return [
+                    'message' => 'Ugovor nije spreman za finalizaciju.',
+                    ...$validation,
+                ];
+            }
+
+            $finalizedAt = now();
+            $snapshotSha256 = hash(
+                'sha256',
+                json_encode(
+                    $snapshot,
+                    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR
+                )
+            );
+            $statusBefore = $lockedContract->status;
+
+            $lockedContract->status = Contract::STATUS_FINALIZED;
+            $lockedContract->locked_at = $finalizedAt;
+            $lockedContract->finalized_at = $finalizedAt;
+            $lockedContract->finalized_snapshot_sha256 = $snapshotSha256;
+            $lockedContract->save();
+
+            $this->auditLogger->record('contract.finalized', $lockedContract, [
+                'snapshot_sha256' => $snapshotSha256,
+                'status_before' => $statusBefore,
+                'status_after' => Contract::STATUS_FINALIZED,
+                'finalized_at' => $finalizedAt->toIso8601String(),
+                'locked_at' => $finalizedAt->toIso8601String(),
+            ]);
+
+            return [
+                'message' => 'Ugovor je finaliziran i zaključan.',
+                'contract_id' => $lockedContract->id,
+                'status' => $lockedContract->status,
+                'locked' => true,
+                'snapshot_sha256' => $snapshotSha256,
+                'redirect_url' => route('contracts.index'),
+            ];
+        });
+
+        if (($result['valid'] ?? true) === false) {
+            return response()->json($result, 422);
+        }
+
+        session()->flash('success', $result['message']);
+
+        return response()->json($result);
+    }
+
     public function storeSnapshot(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
@@ -337,6 +550,28 @@ class ContractController extends Controller
         abort_unless(
             $storedFile
                 && $storedFile->purpose === StoredFile::PURPOSE_DRAFT_PDF
+                && $storedFile->storage_disk === StoredFile::DISK_LOCAL
+                && filled($storedFile->storage_path),
+            404
+        );
+        abort_unless(
+            Storage::disk(StoredFile::DISK_LOCAL)->exists($storedFile->storage_path),
+            404
+        );
+
+        return $storedFile;
+    }
+
+    private function resolveAccessibleFinalPdf(Request $request, Contract $contract): StoredFile
+    {
+        abort_unless($contract->created_by_user_id === $request->user()->id, 403);
+        abort_unless($contract->isFinalized(), 403);
+
+        $storedFile = $contract->finalPdfFile;
+
+        abort_unless(
+            $storedFile
+                && $storedFile->purpose === StoredFile::PURPOSE_FINAL_PDF
                 && $storedFile->storage_disk === StoredFile::DISK_LOCAL
                 && filled($storedFile->storage_path),
             404

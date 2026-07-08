@@ -14,12 +14,19 @@ final class StoredFile extends Model
     use HasFactory;
 
     public const PURPOSE_TEMPLATE = 'template';
+
     public const PURPOSE_DRAFT_PDF = 'draft_pdf';
+
+    public const PURPOSE_FINAL_PDF = 'final_pdf';
+
     public const PURPOSE_SIGNED_PDF = 'signed_pdf';
+
     public const PURPOSE_CERTIFICATE = 'certificate';
+
     public const PURPOSE_IDENTITY_CAPTURE = 'identity_capture';
 
     public const DISK_LOCAL = 'local';
+
     public const DISK_S3 = 's3';
 
     protected $table = 'files';
@@ -53,6 +60,11 @@ final class StoredFile extends Model
     public function signedContracts(): HasMany
     {
         return $this->hasMany(Contract::class, 'signed_pdf_file_id');
+    }
+
+    public function finalizedContracts(): HasMany
+    {
+        return $this->hasMany(Contract::class, 'final_pdf_file_id');
     }
 
     public function certificates(): HasMany

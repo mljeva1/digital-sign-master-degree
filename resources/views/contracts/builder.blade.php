@@ -101,6 +101,16 @@
                     >
                         Preuzmi probni PDF
                     </button>
+
+                    @if ($contractId && $contractStatus === \App\Models\Contract::STATUS_DRAFT)
+                        <button
+                            type="button"
+                            id="openFinalizeModalButton"
+                            class="rounded-full border border-amber-300/30 bg-amber-300/10 px-5 py-2.5 text-sm font-bold text-amber-100 transition hover:bg-amber-300/15"
+                        >
+                            Finaliziraj i zaključaj
+                        </button>
+                    @endif
                 </div>
             </div>
         </header>
@@ -343,16 +353,50 @@
         Promjene su vidljive u previewu. Spremanje u bazu ide u sljedećem koraku.
     </div>
 
+    @if ($contractId && $contractStatus === \App\Models\Contract::STATUS_DRAFT)
+        <div id="finalizeModal" class="fixed inset-0 z-[70] hidden items-center justify-center bg-slate-950/80 px-5 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="finalizeModalTitle">
+            <div class="w-full max-w-lg rounded-[2rem] border border-amber-300/20 bg-slate-900 p-6 shadow-2xl shadow-black/60">
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-amber-200">Zaključavanje ugovora</p>
+                <h2 id="finalizeModalTitle" class="mt-2 text-2xl font-semibold text-white">Finalizirati ugovor?</h2>
+                <p class="mt-4 text-sm leading-6 text-slate-300">
+                    Nakon finalizacije ugovor više neće biti moguće uređivati. Snapshot će biti zaključan, a finalni PDF će se generirati iz zaključane verzije ugovora. Ova akcija nije digitalni potpis.
+                </p>
+
+                <div id="finalizeValidationErrors" class="mt-5 hidden rounded-2xl border border-red-300/20 bg-red-300/[0.07] px-4 py-3 text-sm text-red-100">
+                    <p class="font-semibold">Ugovor nije spreman za finalizaciju.</p>
+                    <ul id="finalizeValidationErrorList" class="mt-2 list-disc space-y-1 pl-5"></ul>
+                </div>
+
+                <div class="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                    <button type="button" id="cancelFinalizeButton" class="rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-white/10">
+                        Odustani
+                    </button>
+                    <button type="button" id="confirmFinalizeButton" class="rounded-full border border-amber-300/30 bg-amber-300 px-5 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-amber-200">
+                        Finaliziraj i zaključaj
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endif
+
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const form = document.getElementById('contractBuilderForm');
             const iframe = document.getElementById('contractPreviewFrame');
             const fakeSaveButton = document.getElementById('fakeSaveButton');
             const fakePdfButton = document.getElementById('fakePdfButton');
+            const openFinalizeModalButton = document.getElementById('openFinalizeModalButton');
+            const finalizeModal = document.getElementById('finalizeModal');
+            const cancelFinalizeButton = document.getElementById('cancelFinalizeButton');
+            const confirmFinalizeButton = document.getElementById('confirmFinalizeButton');
+            const finalizeValidationErrors = document.getElementById('finalizeValidationErrors');
+            const finalizeValidationErrorList = document.getElementById('finalizeValidationErrorList');
             const toast = document.getElementById('toast');
             const saveUrl = @json(route('contracts.snapshot.store'));
+            const finalizeUrl = @json($contractId ? route('contracts.finalize.store', $contractId) : null);
             const initialSnapshot = @json($snapshot);
             let currentContractId = @json($contractId);
+            let hasUnsavedChanges = false;
 
             const formatDate = (value) => {
                 if (! value) {
@@ -457,6 +501,7 @@
                     }
 
                     currentContractId = data.contract_id;
+                    hasUnsavedChanges = false;
                     showToast(data.message);
                 } catch (error) {
                     showToast(error.message || 'Snapshot nije spremljen.');
@@ -466,8 +511,83 @@
                 }
             };
 
-            form.addEventListener('input', updatePreview);
-            form.addEventListener('change', updatePreview);
+            const markAsChangedAndUpdatePreview = () => {
+                hasUnsavedChanges = true;
+                updatePreview();
+            };
+
+            const closeFinalizeModal = () => {
+                finalizeModal?.classList.add('hidden');
+                finalizeModal?.classList.remove('flex');
+            };
+
+            const openFinalizeModal = () => {
+                if (hasUnsavedChanges) {
+                    showToast('Imate nespremljene promjene. Prvo spremite promjene prije finalizacije.');
+
+                    return;
+                }
+
+                finalizeValidationErrors?.classList.add('hidden');
+                finalizeValidationErrorList?.replaceChildren();
+                finalizeModal?.classList.remove('hidden');
+                finalizeModal?.classList.add('flex');
+            };
+
+            const showFinalizeValidationErrors = (data) => {
+                const fields = [
+                    ...(data.missing_fields || []).map((field) => `${field.label}: obavezno polje nije uneseno.`),
+                    ...(data.invalid_fields || []).map((field) => `${field.label}: ${field.reason}`),
+                ];
+
+                finalizeValidationErrorList?.replaceChildren(
+                    ...fields.map((message) => {
+                        const item = document.createElement('li');
+                        item.textContent = message;
+
+                        return item;
+                    })
+                );
+                finalizeValidationErrors?.classList.remove('hidden');
+            };
+
+            const finalizeContract = async () => {
+                if (! finalizeUrl || ! currentContractId) {
+                    return;
+                }
+
+                confirmFinalizeButton.disabled = true;
+                confirmFinalizeButton.textContent = 'Finaliziranje...';
+
+                try {
+                    const response = await fetch(finalizeUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': form.querySelector('[name="_token"]').value,
+                        },
+                    });
+                    const data = await response.json();
+
+                    if (! response.ok) {
+                        if (response.status === 422) {
+                            showFinalizeValidationErrors(data);
+                        }
+
+                        throw new Error(data.message || 'Ugovor nije spreman za finalizaciju.');
+                    }
+
+                    window.location.assign(data.redirect_url);
+                } catch (error) {
+                    showToast(error.message || 'Ugovor nije spreman za finalizaciju.');
+                } finally {
+                    confirmFinalizeButton.disabled = false;
+                    confirmFinalizeButton.textContent = 'Finaliziraj i zaključaj';
+                }
+            };
+
+            form.addEventListener('input', markAsChangedAndUpdatePreview);
+            form.addEventListener('change', markAsChangedAndUpdatePreview);
 
             hydrateForm(initialSnapshot);
             updatePreview();
@@ -480,6 +600,14 @@
 
             fakePdfButton?.addEventListener('click', () => {
                 showToast('PDF download dodajemo nakon što zaključamo HTML preview.');
+            });
+            openFinalizeModalButton?.addEventListener('click', openFinalizeModal);
+            cancelFinalizeButton?.addEventListener('click', closeFinalizeModal);
+            confirmFinalizeButton?.addEventListener('click', finalizeContract);
+            finalizeModal?.addEventListener('click', (event) => {
+                if (event.target === finalizeModal) {
+                    closeFinalizeModal();
+                }
             });
         });
     </script>

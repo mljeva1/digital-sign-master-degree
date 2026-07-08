@@ -52,7 +52,14 @@ class ContractSnapshotTest extends TestCase
             $table->string('draft_pdf_sha256', 64)->nullable();
             $table->unsignedBigInteger('signed_pdf_file_id')->nullable();
             $table->string('signed_pdf_sha256', 64)->nullable();
+            $table->unsignedBigInteger('final_pdf_file_id')->nullable();
+            $table->string('final_pdf_sha256', 64)->nullable();
             $table->timestamp('locked_at')->nullable();
+            $table->string('finalized_snapshot_sha256', 64)->nullable();
+            $table->timestamp('finalized_at')->nullable();
+            $table->string('public_verification_token', 64)->nullable()->unique();
+            $table->timestamp('public_verification_enabled_at')->nullable();
+            $table->timestamp('public_verification_revoked_at')->nullable();
             $table->softDeletes();
             $table->timestamps();
         });
@@ -194,7 +201,7 @@ class ContractSnapshotTest extends TestCase
         $this->actingAs($user)
             ->get(route('contracts.index'))
             ->assertOk()
-            ->assertSee('Nemate spremljenih draftova ugovora.');
+            ->assertSee('Nemate spremljenih ugovora.');
     }
 
     public function test_new_contract_button_links_to_create_route(): void
@@ -237,7 +244,7 @@ class ContractSnapshotTest extends TestCase
             ->get(route('contracts.index'))
             ->assertOk()
             ->assertDontSee('Ugovor #'.$contract->id)
-            ->assertSee('Nemate spremljenih draftova ugovora.');
+            ->assertSee('Nemate spremljenih ugovora.');
     }
 
     public function test_archived_draft_cannot_be_opened_in_builder(): void
@@ -986,6 +993,7 @@ class ContractSnapshotTest extends TestCase
             'seller_oib' => '12345678901',
             'buyer_name' => 'Ana Kovač',
             'buyer_oib' => '10987654321',
+            'vehicle_brand' => 'Volkswagen',
             'vin' => 'WVWZZZ6RZCY000000',
             'price_amount' => 4500,
             'remaining_amount' => 0,

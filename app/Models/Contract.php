@@ -17,11 +17,19 @@ final class Contract extends Model
     use SoftDeletes;
 
     public const STATUS_DRAFT = 'draft';
+
+    public const STATUS_FINALIZED = 'finalized';
+
     public const STATUS_PENDING_SIGNATURES = 'pending_signatures';
+
     public const STATUS_PARTIALLY_SIGNED = 'partially_signed';
+
     public const STATUS_FULLY_SIGNED = 'fully_signed';
+
     public const STATUS_CANCELLED = 'cancelled';
+
     public const STATUS_EXPIRED = 'expired';
+
     public const STATUS_ARCHIVED = 'archived';
 
     protected $guarded = [
@@ -35,6 +43,9 @@ final class Contract extends Model
             'price_amount' => 'decimal:2',
             'filled_data_snapshot' => 'array',
             'locked_at' => 'datetime',
+            'finalized_at' => 'datetime',
+            'public_verification_enabled_at' => 'datetime',
+            'public_verification_revoked_at' => 'datetime',
             'deleted_at' => 'datetime',
         ];
     }
@@ -67,6 +78,11 @@ final class Contract extends Model
     public function draftPdfFile(): BelongsTo
     {
         return $this->belongsTo(StoredFile::class, 'draft_pdf_file_id');
+    }
+
+    public function finalPdfFile(): BelongsTo
+    {
+        return $this->belongsTo(StoredFile::class, 'final_pdf_file_id');
     }
 
     public function signedPdfFile(): BelongsTo
@@ -123,6 +139,11 @@ final class Contract extends Model
         return $this->status === self::STATUS_PENDING_SIGNATURES;
     }
 
+    public function isFinalized(): bool
+    {
+        return $this->status === self::STATUS_FINALIZED;
+    }
+
     public function isPartiallySigned(): bool
     {
         return $this->status === self::STATUS_PARTIALLY_SIGNED;
@@ -156,6 +177,11 @@ final class Contract extends Model
     public function hasSignedPdf(): bool
     {
         return $this->signed_pdf_file_id !== null && filled($this->signed_pdf_sha256);
+    }
+
+    public function hasFinalPdf(): bool
+    {
+        return $this->final_pdf_file_id !== null && filled($this->final_pdf_sha256);
     }
 
     public function canBeEdited(): bool
