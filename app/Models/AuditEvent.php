@@ -7,6 +7,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use LogicException;
 
 final class AuditEvent extends Model
 {
@@ -15,6 +16,17 @@ final class AuditEvent extends Model
     protected $guarded = [
         'id',
     ];
+
+    protected static function booted(): void
+    {
+        self::updating(function (): never {
+            throw new LogicException('Audit zapisi su nepromjenjivi.');
+        });
+
+        self::deleting(function (): never {
+            throw new LogicException('Audit zapisi se ne mogu brisati.');
+        });
+    }
 
     protected function casts(): array
     {
@@ -47,6 +59,6 @@ final class AuditEvent extends Model
 
     public function entityReference(): string
     {
-        return $this->entity_type . '#' . $this->entity_id;
+        return $this->entity_type.'#'.$this->entity_id;
     }
 }

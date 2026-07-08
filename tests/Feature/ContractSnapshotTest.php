@@ -431,7 +431,13 @@ class ContractSnapshotTest extends TestCase
 
         $this->assertSame($contract->id, $event->entity_id);
         $this->assertSame($user->id, $event->actor_user_id);
-        $this->assertSame("contracts/{$contract->id}/draft-preview.pdf", $event->metadata['draft_pdf_path']);
+        $this->assertArrayNotHasKey('draft_pdf_path', $event->metadata);
+        $this->assertStringNotContainsString(
+            "contracts/{$contract->id}",
+            json_encode($event->metadata, JSON_THROW_ON_ERROR)
+        );
+        $this->assertSame($contract->fresh()->draft_pdf_file_id, $event->metadata['file_id']);
+        $this->assertSame(StoredFile::PURPOSE_DRAFT_PDF, $event->metadata['purpose']);
         $this->assertMatchesRegularExpression('/^[a-f0-9]{64}$/', $event->metadata['draft_pdf_sha256']);
         $this->assertNotEmpty($event->metadata['generated_at']);
     }

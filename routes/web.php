@@ -63,6 +63,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/contracts/{contract}/builder', [ContractController::class, 'editBuilder'])
         ->name('contracts.builder.edit');
 
+    Route::get('/contracts/{contract}/audit', [ContractController::class, 'audit'])
+        ->name('contracts.audit.index');
+
     Route::patch('/contracts/{contract}/archive', [ContractController::class, 'archive'])
         ->name('contracts.archive');
 

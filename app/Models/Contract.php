@@ -94,6 +94,12 @@ final class Contract extends Model
         return $this->hasMany(ContractDocument::class);
     }
 
+    public function auditEvents(): HasMany
+    {
+        return $this->hasMany(AuditEvent::class, 'entity_id')
+            ->where('entity_type', class_basename(self::class));
+    }
+
     public function scopeByStatus(Builder $query, string $status): void
     {
         $query->where('status', $status);

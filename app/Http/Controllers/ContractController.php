@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AuditEvent;
 use App\Models\Contract;
 use App\Models\StoredFile;
+use App\Services\Audit\AuditLogger;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -18,6 +19,10 @@ use Illuminate\View\View;
 
 class ContractController extends Controller
 {
+    public function __construct(
+        private readonly AuditLogger $auditLogger
+    ) {}
+
     public function index(Request $request): View
     {
         $contracts = Contract::query()
@@ -29,6 +34,36 @@ class ContractController extends Controller
 
         return view('contracts.index', [
             'contracts' => $contracts,
+        ]);
+    }
+
+    public function audit(Request $request, Contract $contract): View
+    {
+        abort_unless($contract->created_by_user_id === $request->user()->id, 403);
+
+        $this->auditLogger->record('contract.audit_viewed', $contract, [
+            'route_name' => 'contracts.audit.index',
+            'viewed_at' => now()->toIso8601String(),
+        ]);
+
+        $events = AuditEvent::query()
+            ->with('actorUser')
+            ->where('entity_type', class_basename(Contract::class))
+            ->where('entity_id', $contract->id)
+            ->orderByDesc('occurred_at')
+            ->orderByDesc('id')
+            ->get();
+
+        $events->each(function (AuditEvent $event): void {
+            $event->setAttribute(
+                'metadata',
+                $this->auditLogger->sanitizeMetadata($event->metadata ?? [])
+            );
+        });
+
+        return view('contracts.audit.index', [
+            'contract' => $contract,
+            'events' => $events,
         ]);
     }
 
@@ -60,25 +95,15 @@ class ContractController extends Controller
         abort_unless($contract->created_by_user_id === $request->user()->id, 403);
         abort_unless($contract->canBeEdited(), 403);
 
-        DB::transaction(function () use ($request, $contract): void {
+        DB::transaction(function () use ($contract): void {
             $previousStatus = $contract->status;
 
             $contract->status = Contract::STATUS_ARCHIVED;
             $contract->save();
 
-            AuditEvent::query()->create([
-                'occurred_at' => now(),
-                'actor_user_id' => $request->user()->id,
-                'action' => 'contract.draft_archived',
-                'entity_type' => 'Contract',
-                'entity_id' => $contract->id,
-                'success' => true,
-                'ip_address' => $request->ip(),
-                'user_agent' => $request->userAgent(),
-                'metadata' => [
-                    'previous_status' => $previousStatus,
-                    'new_status' => Contract::STATUS_ARCHIVED,
-                ],
+            $this->auditLogger->record('contract.draft_archived', $contract, [
+                'previous_status' => $previousStatus,
+                'new_status' => Contract::STATUS_ARCHIVED,
             ]);
         });
 
@@ -132,20 +157,11 @@ class ContractController extends Controller
             $contract->draft_pdf_sha256 = $sha256;
             $contract->save();
 
-            AuditEvent::query()->create([
-                'occurred_at' => $generatedAt,
-                'actor_user_id' => $request->user()->id,
-                'action' => 'contract.draft_pdf_generated',
-                'entity_type' => 'Contract',
-                'entity_id' => $contract->id,
-                'success' => true,
-                'ip_address' => $request->ip(),
-                'user_agent' => $request->userAgent(),
-                'metadata' => [
-                    'draft_pdf_path' => $path,
-                    'draft_pdf_sha256' => $sha256,
-                    'generated_at' => $generatedAt->toIso8601String(),
-                ],
+            $this->auditLogger->record('contract.draft_pdf_generated', $contract, [
+                'file_id' => $storedFile->id,
+                'purpose' => $storedFile->purpose,
+                'draft_pdf_sha256' => $sha256,
+                'generated_at' => $generatedAt->toIso8601String(),
             ]);
         });
 
@@ -183,20 +199,10 @@ class ContractController extends Controller
         );
         $valid = hash_equals($expectedSha256, $actualSha256);
 
-        AuditEvent::query()->create([
-            'occurred_at' => now(),
-            'actor_user_id' => $request->user()->id,
-            'action' => 'contract.draft_pdf_verified',
-            'entity_type' => 'Contract',
-            'entity_id' => $contract->id,
-            'success' => true,
-            'ip_address' => $request->ip(),
-            'user_agent' => $request->userAgent(),
-            'metadata' => [
-                'expected_sha256' => $expectedSha256,
-                'actual_sha256' => $actualSha256,
-                'valid' => $valid,
-            ],
+        $this->auditLogger->record('contract.draft_pdf_verified', $contract, [
+            'expected_sha256' => $expectedSha256,
+            'actual_sha256' => $actualSha256,
+            'valid' => $valid,
         ]);
 
         return view('contracts.draft-pdf-verify', [
@@ -299,19 +305,9 @@ class ContractController extends Controller
             $contract->filled_data_snapshot = $snapshot;
             $contract->save();
 
-            AuditEvent::query()->create([
-                'occurred_at' => now(),
-                'actor_user_id' => $request->user()->id,
-                'action' => 'contract.snapshot_saved',
-                'entity_type' => 'Contract',
-                'entity_id' => $contract->id,
-                'success' => true,
-                'ip_address' => $request->ip(),
-                'user_agent' => $request->userAgent(),
-                'metadata' => [
-                    'status' => $contract->status,
-                    'snapshot_sha256' => $snapshotHash,
-                ],
+            $this->auditLogger->record('contract.snapshot_saved', $contract, [
+                'status' => $contract->status,
+                'snapshot_sha256' => $snapshotHash,
             ]);
 
             return $contract->refresh();
