@@ -104,6 +104,121 @@ class VehicleCatalogSearchTest extends TestCase
         ]);
     }
 
+    private function seedGolf2(): VehicleCatalogEntry
+    {
+        return VehicleCatalogEntry::query()->create([
+            'source_variant_id' => 3001,
+            'make' => 'Volkswagen',
+            'model' => 'Golf',
+            'generation' => '2',
+            'platform_code' => null,
+            'variant_name' => '1.6 75',
+            'trim_name' => null,
+            'year_from' => 1983,
+            'year_to' => 1991,
+            'body_type' => 'hatchback',
+            'fuel_type' => 'petrol',
+            'transmission_type' => 'manual',
+            'engine_code' => null,
+            'displacement_cc' => 1595,
+            'power_kw' => 55,
+            'power_hp' => 75,
+            'searchable_text' => 'Volkswagen Golf 2 1.6 75HP hatchback petrol manual',
+        ]);
+    }
+
+    private function seedGolf3(): VehicleCatalogEntry
+    {
+        return VehicleCatalogEntry::query()->create([
+            'source_variant_id' => 3002,
+            'make' => 'Volkswagen',
+            'model' => 'Golf',
+            'generation' => '3',
+            'platform_code' => null,
+            'variant_name' => '2.0 GTI',
+            'trim_name' => null,
+            'year_from' => 1991,
+            'year_to' => 1997,
+            'body_type' => 'hatchback',
+            'fuel_type' => 'petrol',
+            'transmission_type' => 'manual',
+            'engine_code' => null,
+            'displacement_cc' => 1984,
+            'power_kw' => 85,
+            'power_hp' => 115,
+            'searchable_text' => 'Volkswagen Golf 3 2.0 GTI 1997 hatchback petrol manual',
+        ]);
+    }
+
+    private function seedGolf7(): VehicleCatalogEntry
+    {
+        return VehicleCatalogEntry::query()->create([
+            'source_variant_id' => 3003,
+            'make' => 'Volkswagen',
+            'model' => 'Golf',
+            'generation' => '7',
+            'platform_code' => null,
+            'variant_name' => '1.2 TSI 105HP',
+            'trim_name' => null,
+            'year_from' => 2012,
+            'year_to' => 2019,
+            'body_type' => 'hatchback',
+            'fuel_type' => 'petrol',
+            'transmission_type' => 'manual',
+            'engine_code' => null,
+            'displacement_cc' => 1197,
+            'power_kw' => 77,
+            'power_hp' => 105,
+            'searchable_text' => 'Volkswagen Golf 7 1.2 TSI 105HP hatchback petrol manual',
+        ]);
+    }
+
+    private function seedGolf7Diesel(): VehicleCatalogEntry
+    {
+        return VehicleCatalogEntry::query()->create([
+            'source_variant_id' => 3004,
+            'make' => 'Volkswagen',
+            'model' => 'Golf',
+            'generation' => '7',
+            'platform_code' => null,
+            'variant_name' => '1.6 TDI 90HP',
+            'trim_name' => null,
+            'year_from' => 2012,
+            'year_to' => 2019,
+            'body_type' => 'hatchback',
+            'fuel_type' => 'diesel',
+            'transmission_type' => 'manual',
+            'engine_code' => null,
+            'displacement_cc' => 1598,
+            'power_kw' => 66,
+            'power_hp' => 90,
+            'searchable_text' => 'Volkswagen Golf 7 1.6 TDI 90HP hatchback diesel manual',
+        ]);
+    }
+
+    private function seedPoloTyp9N(): VehicleCatalogEntry
+    {
+        return VehicleCatalogEntry::query()->create([
+            'source_variant_id' => 3005,
+            'make' => 'Volkswagen',
+            'model' => 'Polo',
+            'generation' => 'Typ 9N 2002',
+            'platform_code' => 'Typ 9N',
+            'variant_name' => '1.4 75HP',
+            'trim_name' => null,
+            'year_from' => 2002,
+            'year_to' => 2005,
+            'body_type' => 'hatchback',
+            'fuel_type' => 'petrol',
+            'transmission_type' => 'manual',
+            'engine_code' => null,
+            'displacement_cc' => 1390,
+            'power_kw' => 55,
+            'power_hp' => 75,
+            'searchable_text' => 'Volkswagen Polo Typ 9N 2002 1.4 75HP hatchback petrol manual',
+        ]);
+    }
+
     public function test_guest_cannot_use_search_endpoint(): void
     {
         $this->seedPolo();
@@ -270,5 +385,81 @@ class VehicleCatalogSearchTest extends TestCase
             ->getJson(route('vehicle-catalog.search', ['q' => 'nepostojeći pojam']))
             ->assertOk()
             ->assertExactJson(['results' => []]);
+    }
+
+    public function test_golf_7_search_ranks_golf_7_as_first_result(): void
+    {
+        $user = User::factory()->create();
+        $this->seedGolf2();
+        $this->seedGolf3();
+        $golf7 = $this->seedGolf7();
+
+        $response = $this->actingAs($user)
+            ->getJson(route('vehicle-catalog.search', ['q' => 'golf 7']))
+            ->assertOk();
+
+        $this->assertSame($golf7->id, $response->json('results.0.id'));
+    }
+
+    public function test_golf_7_search_does_not_match_golf_2_or_golf_3_via_75hp_or_1997_substring(): void
+    {
+        $user = User::factory()->create();
+        $golf2 = $this->seedGolf2();
+        $golf3 = $this->seedGolf3();
+        $golf7 = $this->seedGolf7();
+
+        $response = $this->actingAs($user)
+            ->getJson(route('vehicle-catalog.search', ['q' => 'golf 7']))
+            ->assertOk();
+
+        $ids = collect($response->json('results'))->pluck('id')->all();
+
+        // "7" iz upita ne smije se pogrešno naći unutar "75HP" (Golf 2) ili "1997" (Golf 3) —
+        // brojčani token mora biti samostalna riječ, pa ta dva zapisa uopće ne smiju proći filter.
+        $this->assertNotContains($golf2->id, $ids);
+        $this->assertNotContains($golf3->id, $ids);
+        $this->assertContains($golf7->id, $ids);
+        $this->assertSame($golf7->id, $ids[0]);
+    }
+
+    public function test_polo_6r_search_favours_typ_6r_generation(): void
+    {
+        $user = User::factory()->create();
+        $this->seedPoloTyp9N();
+        $polo6r = $this->seedPolo();
+
+        $response = $this->actingAs($user)
+            ->getJson(route('vehicle-catalog.search', ['q' => 'polo 6r']))
+            ->assertOk();
+
+        $this->assertSame($polo6r->id, $response->json('results.0.id'));
+    }
+
+    public function test_volkswagen_polo_1_2_tdi_search_still_finds_polo_tdi_results(): void
+    {
+        $user = User::factory()->create();
+        $this->seedAudi();
+        $polo = $this->seedPolo();
+
+        $response = $this->actingAs($user)
+            ->getJson(route('vehicle-catalog.search', ['q' => 'volkswagen polo 1.2 tdi']))
+            ->assertOk()
+            ->assertJsonCount(1, 'results');
+
+        $this->assertSame($polo->id, $response->json('results.0.id'));
+    }
+
+    public function test_golf_diesel_search_still_returns_diesel_golf(): void
+    {
+        $user = User::factory()->create();
+        $this->seedGolf7();
+        $golfDiesel = $this->seedGolf7Diesel();
+
+        $response = $this->actingAs($user)
+            ->getJson(route('vehicle-catalog.search', ['q' => 'golf diesel']))
+            ->assertOk()
+            ->assertJsonCount(1, 'results');
+
+        $this->assertSame($golfDiesel->id, $response->json('results.0.id'));
     }
 }
