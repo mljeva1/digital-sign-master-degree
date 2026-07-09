@@ -129,6 +129,34 @@
                     <section class="rounded-[1.75rem] border border-white/10 bg-white/[0.04] p-5">
                         <p class="text-sm font-semibold uppercase tracking-[0.22em] text-indigo-200">3 · Vozilo</p>
 
+                        <div class="mt-5">
+                            <label for="vehicleCatalogSearchInput" class="block text-sm font-medium text-slate-200">Pretraži katalog vozila</label>
+
+                            <div class="relative mt-2">
+                                <input
+                                    id="vehicleCatalogSearchInput"
+                                    type="text"
+                                    autocomplete="off"
+                                    class="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-indigo-300/50 focus:ring-2 focus:ring-indigo-300/20"
+                                    placeholder="Upiši marku, model, motor... npr. Volkswagen Polo 1.2 TDI"
+                                >
+
+                                <ul
+                                    id="vehicleCatalogResults"
+                                    class="absolute inset-x-0 top-full z-10 mt-2 hidden max-h-72 overflow-auto rounded-2xl border border-white/10 bg-slate-900 shadow-2xl shadow-black/50"
+                                ></ul>
+                            </div>
+
+                            <p class="mt-2 text-xs text-slate-400">
+                                Odabir iz kataloga popunjava samo tehničke podatke. VIN, registracija, boja i datum prve registracije ostaju ručni unos.
+                            </p>
+
+                            <p id="vehicleCatalogLoading" class="mt-2 hidden text-xs text-slate-400">Pretraživanje kataloga...</p>
+                            <p id="vehicleCatalogNoResults" class="mt-2 hidden text-xs text-slate-400">Nema rezultata za uneseni pojam.</p>
+                            <p id="vehicleCatalogError" class="mt-2 hidden text-xs text-red-300">Pretraga kataloga trenutno nije dostupna.</p>
+                            <p id="vehicleCatalogSelected" class="mt-2 hidden text-xs font-medium text-emerald-200"></p>
+                        </div>
+
                         <div class="mt-5 grid gap-4 sm:grid-cols-2">
                             <div>
                                 <label for="registration_number" class="block text-sm font-medium text-slate-200">Registarska oznaka</label>
@@ -376,9 +404,17 @@
             const toast = document.getElementById('toast');
             const saveUrl = @json(route('contracts.snapshot.store'));
             const finalizeUrl = @json($contractId ? route('contracts.finalize.store', $contractId) : null);
+            const vehicleCatalogSearchUrl = @json(route('vehicle-catalog.search'));
             const initialSnapshot = @json($snapshot);
             let currentContractId = @json($contractId);
             let hasUnsavedChanges = false;
+
+            const vehicleCatalogSearchInput = document.getElementById('vehicleCatalogSearchInput');
+            const vehicleCatalogResults = document.getElementById('vehicleCatalogResults');
+            const vehicleCatalogLoading = document.getElementById('vehicleCatalogLoading');
+            const vehicleCatalogNoResults = document.getElementById('vehicleCatalogNoResults');
+            const vehicleCatalogError = document.getElementById('vehicleCatalogError');
+            const vehicleCatalogSelected = document.getElementById('vehicleCatalogSelected');
 
             const formatDate = (value) => {
                 if (! value) {
@@ -498,6 +534,189 @@
                 updatePreview();
             };
 
+            const FUEL_TYPE_LABELS_HR = {
+                diesel: 'Dizel',
+                petrol: 'Benzin',
+                gasoline: 'Benzin',
+                electric: 'Električni pogon',
+                hybrid: 'Hibrid',
+            };
+
+            const mapFuelTypeToEngineType = (fuelType) => {
+                if (! fuelType) {
+                    return '';
+                }
+
+                const key = fuelType.trim().toLowerCase();
+
+                return FUEL_TYPE_LABELS_HR[key] || fuelType;
+            };
+
+            const setFieldValueAndDispatch = (fieldName, value) => {
+                const field = form.querySelector(`[data-field="${fieldName}"]`);
+
+                if (! field) {
+                    return;
+                }
+
+                field.value = value;
+                field.dispatchEvent(new Event('input', { bubbles: true }));
+                field.dispatchEvent(new Event('change', { bubbles: true }));
+            };
+
+            const hideAllVehicleCatalogStates = () => {
+                vehicleCatalogResults?.classList.add('hidden');
+                vehicleCatalogLoading?.classList.add('hidden');
+                vehicleCatalogNoResults?.classList.add('hidden');
+                vehicleCatalogError?.classList.add('hidden');
+            };
+
+            const applyCatalogEntry = (entry) => {
+                setFieldValueAndDispatch('vehicle_brand', entry.make || '');
+                setFieldValueAndDispatch('vehicle_model', entry.model || '');
+                setFieldValueAndDispatch('vehicle_tip', entry.variant_name || '');
+
+                if (entry.body_type) {
+                    setFieldValueAndDispatch('body_shape', entry.body_type);
+                }
+
+                if (entry.fuel_type) {
+                    setFieldValueAndDispatch('engine_type', mapFuelTypeToEngineType(entry.fuel_type));
+                }
+
+                if (entry.power_kw !== null && entry.power_kw !== undefined) {
+                    setFieldValueAndDispatch('engine_power_kw', String(entry.power_kw));
+                }
+
+                if (entry.displacement_cc !== null && entry.displacement_cc !== undefined) {
+                    setFieldValueAndDispatch('engine_displacement_cc', String(entry.displacement_cc));
+                }
+
+                if (
+                    entry.year_from !== null && entry.year_from !== undefined
+                    && entry.year_from === entry.year_to
+                ) {
+                    setFieldValueAndDispatch('production_year', String(entry.year_from));
+                }
+
+                if (vehicleCatalogSearchInput) {
+                    vehicleCatalogSearchInput.value = '';
+                }
+
+                hideAllVehicleCatalogStates();
+
+                if (vehicleCatalogSelected) {
+                    vehicleCatalogSelected.textContent = `Odabrano: ${entry.label}`;
+                    vehicleCatalogSelected.classList.remove('hidden');
+                }
+            };
+
+            const renderVehicleCatalogResults = (results) => {
+                if (! vehicleCatalogResults) {
+                    return;
+                }
+
+                vehicleCatalogResults.replaceChildren();
+
+                if (results.length === 0) {
+                    vehicleCatalogResults.classList.add('hidden');
+                    vehicleCatalogNoResults?.classList.remove('hidden');
+
+                    return;
+                }
+
+                vehicleCatalogNoResults?.classList.add('hidden');
+
+                results.forEach((entry) => {
+                    const li = document.createElement('li');
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'block w-full px-4 py-3 text-left text-sm text-white transition hover:bg-white/10 focus:bg-white/10 focus:outline-none';
+
+                    const labelSpan = document.createElement('span');
+                    labelSpan.className = 'block font-semibold';
+                    labelSpan.textContent = entry.label || '';
+
+                    const detailParts = [entry.fuel_type, entry.transmission_type];
+
+                    if (entry.year_from || entry.year_to) {
+                        detailParts.push(
+                            entry.year_from && entry.year_to && entry.year_from !== entry.year_to
+                                ? `${entry.year_from}–${entry.year_to}`
+                                : String(entry.year_from ?? entry.year_to)
+                        );
+                    }
+
+                    if (entry.body_type) {
+                        detailParts.push(entry.body_type);
+                    }
+
+                    const detailSpan = document.createElement('span');
+                    detailSpan.className = 'mt-0.5 block text-xs text-slate-400';
+                    detailSpan.textContent = detailParts.filter(Boolean).join(' · ');
+
+                    button.append(labelSpan, detailSpan);
+                    button.addEventListener('click', () => applyCatalogEntry(entry));
+
+                    li.appendChild(button);
+                    vehicleCatalogResults.appendChild(li);
+                });
+
+                vehicleCatalogResults.classList.remove('hidden');
+            };
+
+            let vehicleCatalogDebounceTimer = null;
+            let vehicleCatalogAbortController = null;
+            let vehicleCatalogRequestSequence = 0;
+
+            const searchVehicleCatalog = async (term) => {
+                const sequence = ++vehicleCatalogRequestSequence;
+
+                vehicleCatalogAbortController?.abort();
+                vehicleCatalogAbortController = new AbortController();
+
+                hideAllVehicleCatalogStates();
+                vehicleCatalogLoading?.classList.remove('hidden');
+
+                try {
+                    const url = new URL(vehicleCatalogSearchUrl, window.location.origin);
+                    url.searchParams.set('q', term);
+                    url.searchParams.set('limit', '10');
+
+                    const response = await fetch(url, {
+                        headers: { 'Accept': 'application/json' },
+                        signal: vehicleCatalogAbortController.signal,
+                    });
+
+                    if (sequence !== vehicleCatalogRequestSequence) {
+                        return;
+                    }
+
+                    vehicleCatalogLoading?.classList.add('hidden');
+
+                    if (! response.ok) {
+                        vehicleCatalogError?.classList.remove('hidden');
+
+                        return;
+                    }
+
+                    const data = await response.json();
+
+                    if (sequence !== vehicleCatalogRequestSequence) {
+                        return;
+                    }
+
+                    renderVehicleCatalogResults(data.results || []);
+                } catch (error) {
+                    if (error.name === 'AbortError' || sequence !== vehicleCatalogRequestSequence) {
+                        return;
+                    }
+
+                    vehicleCatalogLoading?.classList.add('hidden');
+                    vehicleCatalogError?.classList.remove('hidden');
+                }
+            };
+
             const closeFinalizeModal = () => {
                 finalizeModal?.classList.add('hidden');
                 finalizeModal?.classList.remove('flex');
@@ -570,6 +789,50 @@
 
             form.addEventListener('input', markAsChangedAndUpdatePreview);
             form.addEventListener('change', markAsChangedAndUpdatePreview);
+
+            vehicleCatalogSearchInput?.addEventListener('input', (event) => {
+                // Tipkanje u pretragu kataloga ne smije se tretirati kao promjena
+                // ugovornih polja niti okinuti hasUnsavedChanges.
+                event.stopPropagation();
+
+                const term = vehicleCatalogSearchInput.value.trim();
+
+                vehicleCatalogSelected?.classList.add('hidden');
+
+                if (vehicleCatalogDebounceTimer) {
+                    clearTimeout(vehicleCatalogDebounceTimer);
+                }
+
+                if (term.length < 2) {
+                    vehicleCatalogAbortController?.abort();
+                    hideAllVehicleCatalogStates();
+
+                    return;
+                }
+
+                vehicleCatalogDebounceTimer = setTimeout(() => {
+                    searchVehicleCatalog(term);
+                }, 250);
+            });
+
+            vehicleCatalogSearchInput?.addEventListener('keydown', (event) => {
+                event.stopPropagation();
+
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                }
+            });
+
+            document.addEventListener('click', (event) => {
+                if (
+                    vehicleCatalogSearchInput
+                    && vehicleCatalogResults
+                    && ! vehicleCatalogSearchInput.contains(event.target)
+                    && ! vehicleCatalogResults.contains(event.target)
+                ) {
+                    vehicleCatalogResults.classList.add('hidden');
+                }
+            });
 
             hydrateForm(initialSnapshot);
             updatePreview();
