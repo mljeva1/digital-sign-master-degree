@@ -4,6 +4,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ContractController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\PublicContractVerificationController;
+use App\Http\Controllers\VehicleCatalogController;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'welcome')->name('home');
@@ -105,6 +106,10 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/contracts/vehicle-sales-preview', [ContractController::class, 'vehicleSalesPreview'])
         ->name('contracts.vehicle-sales-preview');
+
+    Route::get('/vehicle-catalog/search', [VehicleCatalogController::class, 'search'])
+        ->middleware('throttle:60,1')
+        ->name('vehicle-catalog.search');
 });
 
 Route::middleware(['auth', 'role:admin'])->group(function () {
