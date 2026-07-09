@@ -1887,14 +1887,18 @@ class ContractSnapshotTest extends TestCase
             'generatedAt' => now(),
         ])->render();
 
-        $this->assertStringContainsString('KUPOPRODAJNI UGOVOR', $html);
+        $this->assertStringContainsString('UGOVOR O KUPOPRODAJI MOTORNOG VOZILA', $html);
         $this->assertStringContainsString('FINALIZIRANI UGOVOR', $html);
-        $this->assertStringContainsString('Prodavatelj', $html);
-        $this->assertStringContainsString('Kupac', $html);
-        $this->assertStringContainsString('Predmet ugovora — vozilo', $html);
-        $this->assertStringContainsString('Kupoprodajna cijena i plaćanje', $html);
-        $this->assertStringContainsString('Datum i mjesto sklapanja', $html);
-        $this->assertStringContainsString('Završne odredbe', $html);
+        $this->assertStringContainsString('PRODAVATELJ', $html);
+        $this->assertStringContainsString('KUPAC', $html);
+        $this->assertStringContainsString('zaključili su u (mjesto)', $html);
+        $this->assertStringContainsString('Prodavatelj prodaje kupcu motorno vozilo:', $html);
+        $this->assertStringContainsString('Registarska oznaka', $html);
+        $this->assertStringContainsString('Broj šasije (VIN)', $html);
+        $this->assertStringContainsString('Prodajna cijena ugovorena je u iznosu', $html);
+        $this->assertStringContainsString('Prodavatelj jamči da je vozilo njegovo vlasništvo', $html);
+        $this->assertStringContainsString('Napomena:', $html);
+        $this->assertStringContainsString('OIB:', $html);
         $this->assertStringContainsString('Dokument nije kriptografski digitalno potpisan.', $html);
         $this->assertStringContainsString($contract->finalized_snapshot_sha256, $html);
         $this->assertStringContainsString('Stranica {PAGE_NUM} / {PAGE_COUNT}', $html);

@@ -2,11 +2,11 @@
 <html lang="hr">
 <head>
     <meta charset="utf-8">
-    <title>Kupoprodajni ugovor - finalizirani PDF</title>
+    <title>Ugovor o kupoprodaji motornog vozila - finalizirani PDF</title>
     <style>
         @page {
             size: A4 portrait;
-            margin: 22mm 18mm 28mm;
+            margin: 16mm 16mm 24mm;
         }
 
         * {
@@ -15,212 +15,213 @@
 
         body {
             margin: 0;
-            color: #172033;
+            color: #111111;
             font-family: DejaVu Sans, sans-serif;
             font-size: 9.5px;
-            line-height: 1.42;
+            line-height: 1.45;
         }
 
-        h1, h2, p {
-            margin-top: 0;
-        }
-
-        h1 {
-            margin-bottom: 4px;
-            color: #101827;
-            font-size: 21px;
-            letter-spacing: 0.7px;
-            text-align: center;
-        }
-
-        .document-subtitle {
-            margin-bottom: 14px;
-            color: #64748b;
-            font-size: 9px;
-            letter-spacing: 1.2px;
-            text-align: center;
-            text-transform: uppercase;
+        p {
+            margin: 0 0 6px;
         }
 
         .final-label {
-            margin: 0 auto 16px;
-            border: 1.5px solid #0f766e;
-            color: #0f766e;
-            font-size: 11px;
+            margin: 0 0 10px;
+            color: #555555;
+            font-size: 7.5px;
             font-weight: bold;
-            letter-spacing: 1.4px;
-            padding: 7px 12px;
-            text-align: center;
-            width: 230px;
-        }
-
-        .intro {
-            margin-bottom: 13px;
-            text-align: justify;
-        }
-
-        .section {
-            margin-bottom: 12px;
-            page-break-inside: avoid;
-        }
-
-        .section-title {
-            margin: 0 0 6px;
-            border-bottom: 1px solid #94a3b8;
-            color: #0f172a;
-            font-size: 11px;
-            font-weight: bold;
-            letter-spacing: 0.4px;
-            padding-bottom: 4px;
+            letter-spacing: 1.6px;
+            text-align: right;
             text-transform: uppercase;
         }
 
-        table {
+        .parties-table {
             border-collapse: collapse;
             table-layout: fixed;
             width: 100%;
         }
 
-        .data-table th,
-        .data-table td {
-            border: 1px solid #cbd5e1;
-            padding: 5px 7px;
-            text-align: left;
-            vertical-align: top;
-            overflow-wrap: break-word;
-            word-wrap: break-word;
-        }
-
-        .data-table th {
-            background: #f1f5f9;
-            color: #475569;
-            font-size: 8px;
-            font-weight: bold;
-            text-transform: uppercase;
-            width: 31%;
-        }
-
-        .two-column-table td {
+        .parties-table td {
             padding: 0;
             vertical-align: top;
-            width: 49%;
+            width: 48%;
         }
 
-        .two-column-table td.spacer {
-            width: 2%;
-        }
-
-        .party-box {
-            border: 1px solid #cbd5e1;
-            min-height: 104px;
-            padding: 8px;
+        .parties-table td.spacer {
+            width: 4%;
         }
 
         .party-heading {
-            margin-bottom: 7px;
-            color: #0f766e;
-            font-size: 9px;
+            font-size: 12px;
             font-weight: bold;
-            letter-spacing: 0.6px;
-            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 3px;
+            text-align: center;
         }
 
-        .party-row {
-            margin-bottom: 5px;
+        .party-box {
+            border: 1px solid #333333;
+            min-height: 44px;
+            padding: 5px 7px;
+            text-align: center;
+        }
+
+        .party-box .party-name {
+            font-size: 10.5px;
+            font-weight: bold;
             overflow-wrap: break-word;
             word-wrap: break-word;
         }
 
-        .party-label {
-            color: #64748b;
-            display: block;
-            font-size: 7.5px;
-            text-transform: uppercase;
+        .party-box .party-address {
+            font-size: 9px;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
         }
 
-        .amount {
-            color: #0f172a;
-            font-size: 13px;
+        .party-caption {
+            color: #555555;
+            font-size: 7px;
+            margin-top: 2px;
+            text-align: center;
+        }
+
+        .conclusion-line {
+            margin: 12px 0 10px;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 16px;
+            letter-spacing: 0.6px;
+            margin: 0 0 10px;
+            text-align: center;
+        }
+
+        .fill {
+            border-bottom: 0.75px solid #333333;
             font-weight: bold;
+            padding: 0 6px 1px;
+            white-space: nowrap;
         }
 
-        .statement {
-            margin: 4px 0 0;
+        .lead-line {
+            margin: 0 0 4px;
+        }
+
+        .vehicle-table {
+            border-collapse: collapse;
+            margin-bottom: 10px;
+            table-layout: fixed;
+            width: 100%;
+        }
+
+        .vehicle-table td {
+            border: 1px solid #333333;
+            overflow-wrap: break-word;
+            padding: 3px 5px;
+            vertical-align: top;
+            word-wrap: break-word;
+        }
+
+        .vehicle-table .cell-label {
+            color: #555555;
+            display: block;
+            font-size: 7px;
+        }
+
+        .vehicle-table .cell-value {
+            display: block;
+            font-size: 9.5px;
+            font-weight: bold;
+            min-height: 12px;
+        }
+
+        .payment-block {
+            margin-bottom: 8px;
+        }
+
+        .clause {
+            margin-bottom: 7px;
             text-align: justify;
         }
 
+        .note-block {
+            margin-bottom: 8px;
+        }
+
+        .note-label {
+            font-weight: bold;
+        }
+
+        .note-box {
+            border: 1px solid #333333;
+            min-height: 30px;
+            overflow-wrap: break-word;
+            padding: 4px 6px;
+            word-wrap: break-word;
+        }
+
         .signature-section {
-            margin-top: 22px;
+            margin-top: 20px;
             page-break-inside: avoid;
         }
 
+        .signature-table {
+            border-collapse: collapse;
+            table-layout: fixed;
+            width: 100%;
+        }
+
         .signature-table td {
-            padding: 0 20px;
+            padding: 0 14px;
             text-align: center;
             vertical-align: bottom;
             width: 50%;
         }
 
+        .signature-heading {
+            font-size: 12px;
+            font-weight: bold;
+            letter-spacing: 0.8px;
+        }
+
         .signature-space {
-            height: 34px;
+            height: 38px;
         }
 
         .signature-line {
-            border-top: 1px solid #475569;
-            padding-top: 5px;
+            border-top: 0.75px solid #333333;
+            font-size: 8px;
+            padding-top: 3px;
         }
 
-        .signature-role {
-            color: #475569;
-            font-size: 8px;
-            text-transform: uppercase;
+        .signature-oib {
+            font-size: 9px;
+            margin-top: 5px;
+            text-align: left;
         }
 
         .notice {
-            margin-top: 18px;
-            border: 1px solid #99f6e4;
-            background: #f0fdfa;
-            color: #134e4a;
-            font-size: 8.5px;
-            padding: 8px 10px;
+            border: 0.75px solid #999999;
+            color: #444444;
+            font-size: 8px;
+            margin-top: 14px;
+            padding: 6px 9px;
             page-break-inside: avoid;
             text-align: center;
         }
 
-        .technical-footer {
-            position: fixed;
-            right: 0;
-            bottom: -18mm;
-            left: 0;
-            border-top: 1px solid #cbd5e1;
-            color: #64748b;
-            font-size: 6.8px;
-            line-height: 1.35;
-            padding-top: 5px;
-        }
-
-        .footer-table td {
-            padding: 0;
-            vertical-align: top;
-        }
-
-        .footer-table .footer-main {
-            overflow-wrap: break-word;
-            padding-right: 28mm;
-            width: 100%;
-            word-wrap: break-word;
-        }
-
-        .hash {
-            font-family: DejaVu Sans Mono, monospace;
-            font-size: 6.4px;
-        }
-
         .verification-section {
-            margin-top: 14px;
-            border: 1px solid #cbd5e1;
-            padding: 8px;
+            border: 0.75px solid #999999;
+            margin-top: 10px;
+            padding: 7px;
             page-break-inside: avoid;
+        }
+
+        .verification-table {
+            border-collapse: collapse;
+            width: 100%;
         }
 
         .verification-table td {
@@ -233,220 +234,231 @@
         }
 
         .verification-copy {
+            font-size: 8px;
             padding-left: 10px !important;
         }
 
         .verification-url {
-            color: #0f766e;
+            color: #333333;
             font-family: DejaVu Sans Mono, monospace;
             font-size: 7px;
+            margin: 3px 0;
             overflow-wrap: break-word;
             word-wrap: break-word;
+        }
+
+        .technical-footer {
+            position: fixed;
+            right: 0;
+            bottom: -16mm;
+            left: 0;
+            border-top: 0.75px solid #999999;
+            color: #666666;
+            font-size: 6.8px;
+            line-height: 1.35;
+            padding-top: 4px;
+        }
+
+        .technical-footer .hash {
+            font-family: DejaVu Sans Mono, monospace;
+            font-size: 6.4px;
         }
     </style>
 </head>
 <body>
     @php
-        $display = static fn ($value) => filled($value) ? $value : 'Nije uneseno';
-        $vehicle = trim(implode(' ', array_filter([
-            data_get($snapshot, 'vehicle_brand'),
-            data_get($snapshot, 'vehicle_model'),
-            data_get($snapshot, 'vehicle_tip'),
-        ])));
-        $contractDate = data_get($snapshot, 'contract_date');
-        $formattedContractDate = $contractDate
-            ? \Illuminate\Support\Carbon::parse($contractDate)->format('d.m.Y.')
-            : 'Nije uneseno';
+        $fill = static fn ($value) => filled($value) ? $value : str_repeat("\u{00A0}", 12);
+        $fillDate = static function ($value) {
+            if (blank($value)) {
+                return str_repeat("\u{00A0}", 12);
+            }
+
+            try {
+                return \Illuminate\Support\Carbon::parse($value)->format('d.m.Y.');
+            } catch (\Throwable) {
+                return $value;
+            }
+        };
         $qrCodeDataUri ??= null;
         $verificationUrl ??= null;
     @endphp
 
     <footer class="technical-footer">
-        <table class="footer-table">
-            <tr>
-                <td class="footer-main">
-                    Ugovor ID: {{ $contract->id }}
-                    &nbsp;|&nbsp; Finalizirano: {{ $contract->finalized_at?->format('d.m.Y. H:i:s') ?? 'N/A' }}<br>
-                    Snapshot SHA-256:
-                    <span class="hash">{{ $contract->finalized_snapshot_sha256 ?? 'N/A' }}</span><br>
-                    SHA-256 finalnog PDF-a dostupan je na javnoj stranici za provjeru dokumenta.
-                </td>
-            </tr>
-        </table>
+        Ugovor ID: {{ $contract->id }}
+        &nbsp;|&nbsp; Finalizirano: {{ $contract->finalized_at?->format('d.m.Y. H:i:s') ?? 'N/A' }}<br>
+        Snapshot SHA-256:
+        <span class="hash">{{ $contract->finalized_snapshot_sha256 ?? 'N/A' }}</span><br>
+        SHA-256 finalnog PDF-a dostupan je na javnoj stranici za provjeru dokumenta.
     </footer>
 
-    <h1>KUPOPRODAJNI UGOVOR</h1>
-    <p class="document-subtitle">o kupoprodaji motornog vozila</p>
     <div class="final-label">FINALIZIRANI UGOVOR</div>
 
-    <p class="intro">
-        Ugovorne strane u nastavku sklapaju ovaj ugovor o kupoprodaji motornog vozila
-        pod uvjetima navedenima u ovom dokumentu.
+    <table class="parties-table">
+        <tr>
+            <td>
+                <div class="party-heading">PRODAVATELJ</div>
+                <div class="party-box">
+                    <div class="party-name">{{ $fill(data_get($snapshot, 'seller_name')) }}</div>
+                    <div class="party-address">{{ $fill(data_get($snapshot, 'seller_address')) }}</div>
+                </div>
+                <div class="party-caption">(Ime i prezime fizičke ili naziv pravne osobe i adresa)</div>
+            </td>
+            <td class="spacer"></td>
+            <td>
+                <div class="party-heading">KUPAC</div>
+                <div class="party-box">
+                    <div class="party-name">{{ $fill(data_get($snapshot, 'buyer_name')) }}</div>
+                    <div class="party-address">{{ $fill(data_get($snapshot, 'buyer_address')) }}</div>
+                </div>
+                <div class="party-caption">(Ime i prezime fizičke ili naziv pravne osobe i adresa)</div>
+            </td>
+        </tr>
+    </table>
+
+    <p class="conclusion-line">
+        zaključili su u (mjesto) <span class="fill">{{ $fill(data_get($snapshot, 'place')) }}</span>
+        (datum) <span class="fill">{{ $fillDate(data_get($snapshot, 'contract_date')) }}</span> godine ovaj:
     </p>
 
-    <section class="section">
-        <h2 class="section-title">1. Ugovorne strane</h2>
-        <table class="two-column-table">
-            <tr>
-                <td>
-                    <div class="party-box">
-                        <div class="party-heading">Prodavatelj</div>
-                        <div class="party-row">
-                            <span class="party-label">Ime i prezime / naziv</span>
-                            {{ $display(data_get($snapshot, 'seller_name')) }}
-                        </div>
-                        <div class="party-row">
-                            <span class="party-label">Adresa</span>
-                            {{ $display(data_get($snapshot, 'seller_address')) }}
-                        </div>
-                        <div class="party-row">
-                            <span class="party-label">OIB</span>
-                            {{ $display(data_get($snapshot, 'seller_oib')) }}
-                        </div>
-                    </div>
-                </td>
-                <td class="spacer"></td>
-                <td>
-                    <div class="party-box">
-                        <div class="party-heading">Kupac</div>
-                        <div class="party-row">
-                            <span class="party-label">Ime i prezime / naziv</span>
-                            {{ $display(data_get($snapshot, 'buyer_name')) }}
-                        </div>
-                        <div class="party-row">
-                            <span class="party-label">Adresa</span>
-                            {{ $display(data_get($snapshot, 'buyer_address')) }}
-                        </div>
-                        <div class="party-row">
-                            <span class="party-label">OIB</span>
-                            {{ $display(data_get($snapshot, 'buyer_oib')) }}
-                        </div>
-                    </div>
-                </td>
-            </tr>
-        </table>
-    </section>
+    <h1>UGOVOR O KUPOPRODAJI MOTORNOG VOZILA</h1>
 
-    <section class="section">
-        <h2 class="section-title">2. Predmet ugovora — vozilo</h2>
-        <table class="data-table">
-            <tr>
-                <th>Vozilo</th>
-                <td>{{ $display($vehicle) }}</td>
-                <th>Registracija</th>
-                <td>{{ $display(data_get($snapshot, 'registration_number')) }}</td>
-            </tr>
-            <tr>
-                <th>VIN / broj šasije</th>
-                <td colspan="3">{{ $display(data_get($snapshot, 'vin')) }}</td>
-            </tr>
-            <tr>
-                <th>Vrsta vozila</th>
-                <td>{{ $display(data_get($snapshot, 'vehicle_type')) }}</td>
-                <th>Boja</th>
-                <td>{{ $display(data_get($snapshot, 'vehicle_color')) }}</td>
-            </tr>
-            <tr>
-                <th>Godina proizvodnje</th>
-                <td>{{ $display(data_get($snapshot, 'production_year')) }}</td>
-                <th>Prva registracija</th>
-                <td>{{ $display(data_get($snapshot, 'first_registration_date')) }}</td>
-            </tr>
-            <tr>
-                <th>Motor</th>
-                <td>{{ $display(data_get($snapshot, 'engine_type')) }}</td>
-                <th>Snaga / obujam</th>
-                <td>
-                    {{ $display(data_get($snapshot, 'engine_power_kw')) }} kW /
-                    {{ $display(data_get($snapshot, 'engine_displacement_cc')) }} cm³
-                </td>
-            </tr>
-        </table>
-    </section>
+    <p class="lead-line"><strong>Prodavatelj prodaje kupcu motorno vozilo:</strong></p>
 
-    <section class="section">
-        <h2 class="section-title">3. Kupoprodajna cijena i plaćanje</h2>
-        <table class="data-table">
-            <tr>
-                <th>Kupoprodajna cijena</th>
-                <td class="amount">{{ $display(data_get($snapshot, 'price_amount')) }} EUR</td>
-            </tr>
-            <tr>
-                <th>Iznos riječima</th>
-                <td>{{ $display(data_get($snapshot, 'price_words')) }}</td>
-            </tr>
-            <tr>
-                <th>Isplaćeni iznos</th>
-                <td>{{ $display(data_get($snapshot, 'paid_amount')) }} EUR</td>
-            </tr>
-            <tr>
-                <th>Preostali iznos</th>
-                <td>
-                    {{ $display(data_get($snapshot, 'remaining_amount')) }} EUR
-                    @if (filled(data_get($snapshot, 'remaining_due_date')))
-                        — rok plaćanja: {{ data_get($snapshot, 'remaining_due_date') }}
-                    @endif
-                </td>
-            </tr>
-        </table>
-    </section>
+    <table class="vehicle-table">
+        <tr>
+            <td colspan="4">
+                <span class="cell-label">Registarska oznaka</span>
+                <span class="cell-value">{{ data_get($snapshot, 'registration_number') }}</span>
+            </td>
+            <td colspan="4">
+                <span class="cell-label">Vrsta vozila</span>
+                <span class="cell-value">{{ data_get($snapshot, 'vehicle_type') }}</span>
+            </td>
+            <td colspan="4">
+                <span class="cell-label">Marka vozila</span>
+                <span class="cell-value">{{ data_get($snapshot, 'vehicle_brand') }}</span>
+            </td>
+        </tr>
+        <tr>
+            <td colspan="4">
+                <span class="cell-label">Tip vozila</span>
+                <span class="cell-value">{{ data_get($snapshot, 'vehicle_tip') }}</span>
+            </td>
+            <td colspan="4">
+                <span class="cell-label">Model vozila</span>
+                <span class="cell-value">{{ data_get($snapshot, 'vehicle_model') }}</span>
+            </td>
+            <td colspan="4">
+                <span class="cell-label">Boja vozila</span>
+                <span class="cell-value">{{ data_get($snapshot, 'vehicle_color') }}</span>
+            </td>
+        </tr>
+        <tr>
+            <td colspan="8">
+                <span class="cell-label">Broj šasije (VIN)</span>
+                <span class="cell-value">{{ data_get($snapshot, 'vin') }}</span>
+            </td>
+            <td colspan="4">
+                <span class="cell-label">Oblik karoserije</span>
+                <span class="cell-value">{{ data_get($snapshot, 'body_shape') }}</span>
+            </td>
+        </tr>
+        <tr>
+            <td colspan="4">
+                <span class="cell-label">Država proizvodnje i proizvođač</span>
+                <span class="cell-value">{{ data_get($snapshot, 'manufacturer_country') }}</span>
+            </td>
+            <td colspan="4">
+                <span class="cell-label">Godina proizvodnje</span>
+                <span class="cell-value">{{ data_get($snapshot, 'production_year') }}</span>
+            </td>
+            <td colspan="4">
+                <span class="cell-label">Osnovna namjena</span>
+                <span class="cell-value">{{ data_get($snapshot, 'vehicle_purpose') }}</span>
+            </td>
+        </tr>
+        <tr>
+            <td colspan="3">
+                <span class="cell-label">Datum prve registracije</span>
+                <span class="cell-value">{{ filled(data_get($snapshot, 'first_registration_date')) ? $fillDate(data_get($snapshot, 'first_registration_date')) : '' }}</span>
+            </td>
+            <td colspan="3">
+                <span class="cell-label">Vrsta motora</span>
+                <span class="cell-value">{{ data_get($snapshot, 'engine_type') }}</span>
+            </td>
+            <td colspan="3">
+                <span class="cell-label">Snaga motora u kW</span>
+                <span class="cell-value">{{ data_get($snapshot, 'engine_power_kw') }}</span>
+            </td>
+            <td colspan="3">
+                <span class="cell-label">Radni obujam motora u cm³</span>
+                <span class="cell-value">{{ data_get($snapshot, 'engine_displacement_cc') }}</span>
+            </td>
+        </tr>
+    </table>
 
-    <section class="section">
-        <h2 class="section-title">4. Datum i mjesto sklapanja</h2>
-        <table class="data-table">
-            <tr>
-                <th>Mjesto ugovora</th>
-                <td>{{ $display(data_get($snapshot, 'place')) }}</td>
-                <th>Datum ugovora</th>
-                <td>{{ $formattedContractDate }}</td>
-            </tr>
-            <tr>
-                <th>Nadležni sud</th>
-                <td colspan="3">{{ $display(data_get($snapshot, 'court_place')) }}</td>
-            </tr>
-        </table>
-    </section>
-
-    <section class="section">
-        <h2 class="section-title">5. Završne odredbe</h2>
-        <p class="statement">
-            Prodavatelj izjavljuje da kupcu predaje opisano vozilo, pripadajuće isprave i
-            stvari navedene u ugovoru, a kupac potvrđuje da je upoznat sa stanjem vozila
-            te ga prihvaća pod uvjetima iz ovog ugovora.
+    <div class="payment-block">
+        <p>
+            <strong>Prodajna cijena ugovorena je u iznosu</strong>
+            <span class="fill">{{ $fill(data_get($snapshot, 'price_amount')) }}</span> EUR;
+            iznos riječima <span class="fill">{{ $fill(data_get($snapshot, 'price_words')) }}</span> eura.
         </p>
-        <p class="statement">
-            Ugovorne strane potvrđuju da su pročitale i razumjele sadržaj ugovora, da
-            ugovor odražava njihovu slobodnu i ozbiljnu volju te da ga prihvaćaju u cijelosti.
+        <p>
+            Kupac je prodavatelju isplatio (datum)
+            <span class="fill">{{ $fillDate(data_get($snapshot, 'paid_date')) }}</span> godine;
+            (iznos) <span class="fill">{{ $fill(data_get($snapshot, 'paid_amount')) }}</span> EUR;
+            iznos riječima <span class="fill">{{ $fill(data_get($snapshot, 'paid_words')) }}</span> eura,
         </p>
-        @if (filled(data_get($snapshot, 'included_items')))
-            <p class="statement">
-                <strong>Predane stvari uz vozilo:</strong>
-                {{ data_get($snapshot, 'included_items') }}
-            </p>
-        @endif
-        @if (filled(data_get($snapshot, 'note')))
-            <p class="statement">
-                <strong>Napomena:</strong> {{ data_get($snapshot, 'note') }}
-            </p>
-        @endif
-    </section>
+        <p>
+            a ostatak od prodajne cijene u iznosu od
+            <span class="fill">{{ $fill(data_get($snapshot, 'remaining_amount')) }}</span> EUR;
+            iznos riječima <span class="fill">{{ $fill(data_get($snapshot, 'remaining_words')) }}</span> eura
+            kupac se obvezuje platiti do (datum)
+            <span class="fill">{{ $fillDate(data_get($snapshot, 'remaining_due_date')) }}</span> godine.
+        </p>
+    </div>
+
+    <p class="clause">
+        Prodavatelj jamči da je vozilo njegovo vlasništvo i da nije opterećeno ovrhom,
+        zabilježbom ili drugim teretom. Kupac je pregledao vozilo i nema prigovora
+        u svezi s kvalitetom i prodajnom cijenom.
+    </p>
+
+    <p class="clause">
+        Uz motorno vozilo, prodavatelj je kupcu predao sljedeće stvari:
+        <span class="fill">{{ $fill(data_get($snapshot, 'included_items')) }}</span>
+    </p>
+
+    <p class="clause">
+        Upravnu pristojbu i ostale troškove snosi
+        <span class="fill">{{ $fill(data_get($snapshot, 'costs_paid_by')) }}</span>
+    </p>
+
+    <p class="clause">
+        Prodavatelj i kupac prihvaćaju prava i obveze iz ovog ugovora,
+        a u slučaju spora nadležan je sud u
+        <span class="fill">{{ $fill(data_get($snapshot, 'court_place')) }}</span>
+    </p>
+
+    <div class="note-block">
+        <p class="note-label">Napomena:</p>
+        <div class="note-box">{{ data_get($snapshot, 'note') }}</div>
+    </div>
 
     <section class="signature-section">
         <table class="signature-table">
             <tr>
                 <td>
+                    <div class="signature-heading">PRODAVATELJ</div>
                     <div class="signature-space"></div>
-                    <div class="signature-line">
-                        {{ $display(data_get($snapshot, 'seller_name')) }}<br>
-                        <span class="signature-role">Prodavatelj</span>
-                    </div>
+                    <div class="signature-line">(vlastoručni potpis)</div>
+                    <div class="signature-oib">OIB: <strong>{{ $fill(data_get($snapshot, 'seller_oib')) }}</strong></div>
                 </td>
                 <td>
+                    <div class="signature-heading">KUPAC</div>
                     <div class="signature-space"></div>
-                    <div class="signature-line">
-                        {{ $display(data_get($snapshot, 'buyer_name')) }}<br>
-                        <span class="signature-role">Kupac</span>
-                    </div>
+                    <div class="signature-line">(vlastoručni potpis)</div>
+                    <div class="signature-oib">OIB: <strong>{{ $fill(data_get($snapshot, 'buyer_oib')) }}</strong></div>
                 </td>
             </tr>
         </table>
