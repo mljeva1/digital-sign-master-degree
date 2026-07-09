@@ -29,6 +29,14 @@ master-degree-obsidian/.obsidian/
 master-degree-obsidian/node_modules/
 .claude/settings.local.json
 
+# Local vehicle catalog SQLite sources — never committed
+/main_v2.sqlite
+/main_v2.sqlite-*
+/storage/app/import_sources/*.sqlite
+/storage/app/import_sources/*.sqlite-*
+/storage/app/import_sources/*.db
+/storage/app/import_sources/*.db-*
+
 # Local CMS/X.509 signing material — never committed
 *.key
 *.pem
