@@ -55,6 +55,23 @@ final class ImportVehicleCatalog extends Command
         'searchable_text',
     ];
 
+    /**
+     * Maksimalne duljine string kolona u ciljnoj vehicle_catalog_entries shemi,
+     * po izvornim kolonama. searchable_text je TEXT i nema limit.
+     */
+    private const TARGET_STRING_LIMITS = [
+        'make_name' => 80,
+        'model_name' => 120,
+        'generation_name' => 120,
+        'platform_code' => 60,
+        'variant_name' => 160,
+        'trim_name' => 120,
+        'body_type' => 40,
+        'fuel_type' => 30,
+        'transmission_type' => 30,
+        'engine_code' => 80,
+    ];
+
     public function handle(): int
     {
         $startedAt = microtime(true);
@@ -107,6 +124,25 @@ final class ImportVehicleCatalog extends Command
 
         if ($totalSourceRows === 0) {
             $this->error('Izvorna tablica "'.self::SOURCE_TABLE.'" je prazna.');
+
+            return self::FAILURE;
+        }
+
+        $lengthViolations = $this->stringLengthViolations($source, $limit);
+
+        if ($lengthViolations !== []) {
+            $this->error('Izvor nije kompatibilan s ciljnom shemom — preduge string vrijednosti:');
+
+            foreach ($lengthViolations as $violation) {
+                $this->error(sprintf(
+                    '  %s -> %s: limit %d, stvarni max %d, redaka preko limita: %d',
+                    $violation['source_column'],
+                    self::COLUMN_MAP[$violation['source_column']],
+                    $violation['limit'],
+                    $violation['max_length'],
+                    $violation['rows_over_limit']
+                ));
+            }
 
             return self::FAILURE;
         }
@@ -236,6 +272,49 @@ final class ImportVehicleCatalog extends Command
         );
 
         return array_values(array_diff(array_keys(self::COLUMN_MAP), $existing));
+    }
+
+    /**
+     * Read-only provjera duljina string kolona izvora prema limitima ciljne sheme.
+     * Poštuje --limit (validira samo retke koje bi import stvarno pročitao).
+     *
+     * @return list<array{source_column: string, limit: int, max_length: int, rows_over_limit: int}>
+     */
+    private function stringLengthViolations(PDO $source, ?int $limit): array
+    {
+        $selects = [];
+
+        foreach (array_keys(self::TARGET_STRING_LIMITS) as $index => $column) {
+            $selects[] = "MAX(LENGTH({$column})) AS max_{$index}";
+            $selects[] = 'SUM(CASE WHEN LENGTH('.$column.') > '.self::TARGET_STRING_LIMITS[$column]." THEN 1 ELSE 0 END) AS over_{$index}";
+        }
+
+        $from = self::SOURCE_TABLE;
+
+        if ($limit !== null) {
+            $from = '(SELECT * FROM '.self::SOURCE_TABLE." ORDER BY vehicle_variant_id LIMIT {$limit})";
+        }
+
+        $row = $source
+            ->query('SELECT '.implode(', ', $selects).' FROM '.$from)
+            ->fetch(PDO::FETCH_ASSOC);
+
+        $violations = [];
+
+        foreach (array_keys(self::TARGET_STRING_LIMITS) as $index => $column) {
+            $rowsOverLimit = (int) ($row["over_{$index}"] ?? 0);
+
+            if ($rowsOverLimit > 0) {
+                $violations[] = [
+                    'source_column' => $column,
+                    'limit' => self::TARGET_STRING_LIMITS[$column],
+                    'max_length' => (int) $row["max_{$index}"],
+                    'rows_over_limit' => $rowsOverLimit,
+                ];
+            }
+        }
+
+        return $violations;
     }
 
     /**

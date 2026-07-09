@@ -55,7 +55,7 @@ class VehicleCatalogImportTest extends TestCase
             $table->string('body_type', 40)->nullable();
             $table->string('fuel_type', 30)->nullable();
             $table->string('transmission_type', 30)->nullable();
-            $table->string('engine_code', 40)->nullable();
+            $table->string('engine_code', 80)->nullable();
             $table->integer('displacement_cc')->nullable();
             $table->integer('power_kw')->nullable();
             $table->integer('power_hp')->nullable();
@@ -295,6 +295,63 @@ class VehicleCatalogImportTest extends TestCase
         $this->artisan('vehicle-catalog:import', ['path' => $path])
             ->expectsOutputToContain('nije pouzdan')
             ->assertExitCode(1);
+    }
+
+    public function test_dry_run_fails_when_source_string_exceeds_target_limit(): void
+    {
+        $row = $this->poloSourceRow();
+        $row['engine_code'] = str_repeat('X', 81);
+
+        $path = $this->createSourceDatabase([$row]);
+
+        $this->artisan('vehicle-catalog:import', ['path' => $path, '--dry-run' => true])
+            ->expectsOutputToContain('engine_code')
+            ->assertExitCode(1);
+
+        $this->assertSame(0, VehicleCatalogEntry::query()->count());
+    }
+
+    public function test_real_import_fails_before_writing_when_source_string_exceeds_target_limit(): void
+    {
+        $tooLong = $this->poloSourceRow();
+        $tooLong['vehicle_variant_id'] = 99999;
+        $tooLong['engine_code'] = str_repeat('X', 81);
+
+        $path = $this->createSourceDatabase([$this->audiSourceRow(), $tooLong]);
+
+        $this->artisan('vehicle-catalog:import', ['path' => $path])
+            ->expectsOutputToContain('engine_code')
+            ->assertExitCode(1);
+
+        $this->assertSame(0, VehicleCatalogEntry::query()->count());
+    }
+
+    public function test_length_validation_respects_limit_option(): void
+    {
+        $tooLong = $this->poloSourceRow();
+        $tooLong['vehicle_variant_id'] = 99999;
+        $tooLong['engine_code'] = str_repeat('X', 81);
+
+        $path = $this->createSourceDatabase([$this->audiSourceRow(), $tooLong]);
+
+        // Predugi redak je izvan --limit=1 prozora pa import prolazi.
+        $this->artisan('vehicle-catalog:import', ['path' => $path, '--limit' => 1])
+            ->assertExitCode(0);
+
+        $this->assertSame(1, VehicleCatalogEntry::query()->count());
+    }
+
+    public function test_engine_code_of_sixty_characters_imports_successfully(): void
+    {
+        $row = $this->poloSourceRow();
+        $row['engine_code'] = str_repeat('E', 60);
+
+        $path = $this->createSourceDatabase([$row]);
+
+        $this->artisan('vehicle-catalog:import', ['path' => $path])
+            ->assertExitCode(0);
+
+        $this->assertSame(str_repeat('E', 60), VehicleCatalogEntry::query()->sole()->engine_code);
     }
 
     public function test_search_scope_finds_polo_by_multi_word_term(): void
