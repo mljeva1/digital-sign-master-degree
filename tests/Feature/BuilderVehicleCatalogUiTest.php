@@ -68,6 +68,18 @@ class BuilderVehicleCatalogUiTest extends TestCase
             );
     }
 
+    public function test_builder_help_text_mentions_manual_production_year_check(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->get(route('contracts.create'))
+            ->assertOk()
+            ->assertSee(
+                'Godinu proizvodnje, VIN, registraciju, boju i datum prve registracije provjeri i unesi ručno.'
+            );
+    }
+
     public function test_builder_maps_allowed_catalog_fields_in_javascript(): void
     {
         $user = User::factory()->create();
@@ -75,12 +87,12 @@ class BuilderVehicleCatalogUiTest extends TestCase
         $this->actingAs($user)
             ->get(route('contracts.create'))
             ->assertOk()
-            ->assertSee("setFieldValueAndDispatch('vehicle_brand'", false)
-            ->assertSee("setFieldValueAndDispatch('vehicle_model'", false)
-            ->assertSee("setFieldValueAndDispatch('vehicle_tip'", false)
-            ->assertSee("setFieldValueAndDispatch('engine_type'", false)
-            ->assertSee("setFieldValueAndDispatch('engine_power_kw'", false)
-            ->assertSee("setFieldValueAndDispatch('engine_displacement_cc'", false);
+            ->assertSee("setFieldValue('vehicle_brand'", false)
+            ->assertSee("setFieldValue('vehicle_model'", false)
+            ->assertSee("setFieldValue('vehicle_tip'", false)
+            ->assertSee("setFieldValue('engine_type'", false)
+            ->assertSee("setFieldValue('engine_power_kw'", false)
+            ->assertSee("setFieldValue('engine_displacement_cc'", false);
     }
 
     public function test_builder_does_not_map_manual_only_fields_from_catalog_autofill(): void
@@ -91,9 +103,55 @@ class BuilderVehicleCatalogUiTest extends TestCase
             ->get(route('contracts.create'))
             ->assertOk();
 
-        foreach (['vin', 'registration_number', 'vehicle_color', 'first_registration_date', 'manufacturer_country', 'vehicle_purpose'] as $manualField) {
-            $response->assertDontSee("setFieldValueAndDispatch('{$manualField}'", false);
+        foreach ([
+            'vin',
+            'registration_number',
+            'vehicle_color',
+            'first_registration_date',
+            'manufacturer_country',
+            'vehicle_purpose',
+            'production_year',
+        ] as $manualField) {
+            $response->assertDontSee("setFieldValue('{$manualField}'", false);
         }
+    }
+
+    public function test_builder_does_not_autofill_production_year_from_catalog(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->get(route('contracts.create'))
+            ->assertOk()
+            ->assertDontSee("setFieldValue('production_year'", false)
+            ->assertDontSee('production_year_hint', false);
+    }
+
+    public function test_builder_contains_vehicle_tip_simplification_helper(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->get(route('contracts.create'))
+            ->assertOk()
+            ->assertSee('extractSimpleVehicleTip', false)
+            ->assertSee('"1.6 TDI 90HP Advance" -> "1.6 TDI"', false)
+            ->assertSee('"1.2 TDI 75HP BlueMotion" -> "1.2 TDI"', false)
+            ->assertSee("setFieldValue('vehicle_tip', extractSimpleVehicleTip(entry.variant_name))", false);
+    }
+
+    public function test_builder_body_shape_autofill_is_conservative_and_does_not_overwrite(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->get(route('contracts.create'))
+            ->assertOk()
+            ->assertSee('formatBodyShapeLabel', false)
+            ->assertSee(
+                "setFieldValue('body_shape', formatBodyShapeLabel(entry.body_type), { overwrite: false })",
+                false
+            );
     }
 
     public function test_builder_does_not_introduce_hidden_catalog_entry_id_field(): void

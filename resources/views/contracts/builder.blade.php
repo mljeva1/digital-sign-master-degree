@@ -150,6 +150,9 @@
                             <p class="mt-2 text-xs text-slate-400">
                                 Odabir iz kataloga popunjava samo tehničke podatke. VIN, registracija, boja i datum prve registracije ostaju ručni unos.
                             </p>
+                            <p class="mt-1 text-xs text-slate-400">
+                                Godinu proizvodnje, VIN, registraciju, boju i datum prve registracije provjeri i unesi ručno.
+                            </p>
 
                             <p id="vehicleCatalogLoading" class="mt-2 hidden text-xs text-slate-400">Pretraživanje kataloga...</p>
                             <p id="vehicleCatalogNoResults" class="mt-2 hidden text-xs text-slate-400">Nema rezultata za uneseni pojam.</p>
@@ -552,10 +555,51 @@
                 return FUEL_TYPE_LABELS_HR[key] || fuelType;
             };
 
-            const setFieldValueAndDispatch = (fieldName, value) => {
+            // Zadržava samo "<obujam> <kod motora>" (npr. "1.6 TDI"), odbacuje HP/trim/mjenjač.
+            // "1.6 TDI 90HP Advance" -> "1.6 TDI"; "1.2 TDI 75HP BlueMotion" -> "1.2 TDI".
+            // Ako obrazac nije prepoznat, vraća originalni variant_name (bez rezanja nagađanjem).
+            const extractSimpleVehicleTip = (variantName) => {
+                if (! variantName) {
+                    return '';
+                }
+
+                const match = variantName.match(/^(\d+\.\d+)\s+([A-Za-z]+)\s+\d+\s*HP\b/i);
+
+                if (! match) {
+                    return variantName;
+                }
+
+                return `${match[1]} ${match[2].toUpperCase()}`;
+            };
+
+            const formatBodyShapeLabel = (bodyType) => {
+                const trimmed = (bodyType || '').trim();
+
+                if (trimmed === '') {
+                    return '';
+                }
+
+                return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
+            };
+
+            const setFieldValue = (fieldName, value, options = {}) => {
+                const { overwrite = true } = options;
+
+                if (value === null || value === undefined || value === '') {
+                    return;
+                }
+
                 const field = form.querySelector(`[data-field="${fieldName}"]`);
 
                 if (! field) {
+                    return;
+                }
+
+                if (! overwrite && field.value.trim() !== '') {
+                    return;
+                }
+
+                if (field.value === value) {
                     return;
                 }
 
@@ -572,32 +616,25 @@
             };
 
             const applyCatalogEntry = (entry) => {
-                setFieldValueAndDispatch('vehicle_brand', entry.make || '');
-                setFieldValueAndDispatch('vehicle_model', entry.model || '');
-                setFieldValueAndDispatch('vehicle_tip', entry.variant_name || '');
+                setFieldValue('vehicle_brand', entry.make || '');
+                setFieldValue('vehicle_model', entry.model || '');
+                setFieldValue('vehicle_tip', extractSimpleVehicleTip(entry.variant_name));
 
-                if (entry.body_type) {
-                    setFieldValueAndDispatch('body_shape', entry.body_type);
-                }
+                // Ne prepisuje postojeću ručno unesenu vrijednost karoserije.
+                setFieldValue('body_shape', formatBodyShapeLabel(entry.body_type), { overwrite: false });
 
-                if (entry.fuel_type) {
-                    setFieldValueAndDispatch('engine_type', mapFuelTypeToEngineType(entry.fuel_type));
-                }
+                setFieldValue('engine_type', mapFuelTypeToEngineType(entry.fuel_type));
 
                 if (entry.power_kw !== null && entry.power_kw !== undefined) {
-                    setFieldValueAndDispatch('engine_power_kw', String(entry.power_kw));
+                    setFieldValue('engine_power_kw', String(entry.power_kw));
                 }
 
                 if (entry.displacement_cc !== null && entry.displacement_cc !== undefined) {
-                    setFieldValueAndDispatch('engine_displacement_cc', String(entry.displacement_cc));
+                    setFieldValue('engine_displacement_cc', String(entry.displacement_cc));
                 }
 
-                if (
-                    entry.year_from !== null && entry.year_from !== undefined
-                    && entry.year_from === entry.year_to
-                ) {
-                    setFieldValueAndDispatch('production_year', String(entry.year_from));
-                }
+                // Godina proizvodnje je podatak konkretnog vozila i ostaje ručni unos —
+                // katalog nema pouzdanu godinu za jedan primjerak, samo raspon generacije.
 
                 if (vehicleCatalogSearchInput) {
                     vehicleCatalogSearchInput.value = '';
