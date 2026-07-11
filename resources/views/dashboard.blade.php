@@ -22,6 +22,9 @@
                 <a href="{{ route('documents.index') }}" class="inline-flex rounded-full bg-cyan-300 px-6 py-3 text-sm font-bold text-slate-950 transition hover:bg-cyan-200">
                     Dokumenti
                 </a>
+                <a href="{{ route('profile.edit') }}" class="inline-flex rounded-full border border-white/10 bg-white/5 px-6 py-3 text-sm font-bold text-white transition hover:bg-white/10">
+                    Profil
+                </a>
             </div>
             <form method="POST" action="{{ route('logout') }}">
                 @csrf

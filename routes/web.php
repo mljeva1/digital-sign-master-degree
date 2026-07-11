@@ -4,6 +4,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ContractController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\PublicContractVerificationController;
+use App\Http\Controllers\UserContractProfileController;
 use App\Http\Controllers\VehicleCatalogController;
 use Illuminate\Support\Facades\Route;
 
@@ -58,6 +59,12 @@ Route::middleware('auth')->group(function () {
 
     Route::post('/logout', [AuthController::class, 'logout'])
         ->name('logout');
+
+    Route::get('/profile', [UserContractProfileController::class, 'edit'])
+        ->name('profile.edit');
+
+    Route::patch('/profile', [UserContractProfileController::class, 'update'])
+        ->name('profile.update');
 
     Route::get('/contracts', [ContractController::class, 'index'])
         ->name('contracts.index');
