@@ -2,19 +2,21 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\StoredFile;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 class DocumentController extends Controller
 {
-    public function index(): View
+    public function index(Request $request): View
     {
-        $documents = DB::table('files')
+        $documents = $this->ownUserUploadsQuery($request)
             ->orderByDesc('id')
             ->paginate(10);
 
@@ -30,8 +32,7 @@ class DocumentController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'title' => ['nullable', 'string', 'max:255'],
+        $request->validate([
             'document' => ['required', 'file', 'mimes:pdf,doc,docx', 'max:10240'],
         ]);
 
@@ -39,89 +40,128 @@ class DocumentController extends Controller
 
         $originalName = $uploadedFile->getClientOriginalName();
         $extension = $uploadedFile->getClientOriginalExtension();
+        $sizeBytes = $uploadedFile->getSize();
 
-        $storedName = Str::uuid()->toString() . '.' . $extension;
+        $storedName = Str::uuid()->toString().'.'.$extension;
+        $directory = 'documents/'.now()->format('Y/m');
 
-        $directory = 'documents/' . now()->format('Y/m');
-
-        $storedPath = $uploadedFile->storeAs(
-            $directory, 
-            $storedName, 
-            'local'
+        $storagePath = $uploadedFile->storeAs(
+            $directory,
+            $storedName,
+            StoredFile::DISK_LOCAL
         );
 
-        $absolutePath = Storage::disk('local')->path($storedPath);
+        try {
+            $absolutePath = Storage::disk(StoredFile::DISK_LOCAL)->path($storagePath);
 
-        $sha256Hash = hash_file('sha256', $absolutePath);
+            $sha256 = hash_file('sha256', $absolutePath);
 
-        DB::table('files')->insert([
-            'original_name' => $validated['title'] ?: $originalName,
-            'stored_name' => $storedName,
-            'disk' => 'local',
-            'path' => $storedPath,
-            'mime_type' => $uploadedFile->getMimeType(),
-            'size_bytes' => $uploadedFile->getSize(),
-            'sha256_hash' => $sha256Hash,
-            'uploaded_by_user_id' => $request->user()->id,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+            // Server-side content detection (Symfony's finfo-backed guesser),
+            // never the client-declared Content-Type header.
+            $mimeType = $uploadedFile->getMimeType();
+
+            if ($mimeType === null || $mimeType === '' || strlen($mimeType) > 120) {
+                throw new RuntimeException('Poslužiteljska MIME detekcija dokumenta nije uspjela.');
+            }
+
+            StoredFile::create([
+                'purpose' => StoredFile::PURPOSE_USER_UPLOAD,
+                'storage_disk' => StoredFile::DISK_LOCAL,
+                'storage_path' => $storagePath,
+                'original_filename' => $originalName,
+                'mime_type' => $mimeType,
+                'size_bytes' => $sizeBytes,
+                'sha256' => $sha256,
+                'created_by_user_id' => $request->user()->id,
+            ]);
+        } catch (Throwable $e) {
+            // Persisting the metadata row failed after the bytes were written;
+            // remove the now-orphaned private file before surfacing the error.
+            Storage::disk(StoredFile::DISK_LOCAL)->delete($storagePath);
+
+            throw $e;
+        }
 
         return redirect()
             ->route('documents.index')
             ->with('success', 'Dokument je uspješno spremljen u private storage i SHA-256 hash je izračunat.');
     }
 
-    public function show(int $file): View
+    public function show(Request $request, int $file): View
     {
-        $document = DB::table('files')
-            ->where('id', $file)
-            ->first();
-
-        abort_if(! $document, 404);
+        $document = $this->findOwnUserUpload($request, $file);
 
         return view('documents.show', [
             'document' => $document,
         ]);
     }
 
-    public function download(int $file): StreamedResponse
+    public function download(Request $request, int $file): StreamedResponse
     {
-        $document = DB::table('files')
-            ->where('id', $file)
-            ->first();
+        $document = $this->findOwnUserUpload($request, $file);
 
-        abort_if(! $document, 404);
+        abort_if(
+            ! Storage::disk($document->storage_disk)->exists($document->storage_path),
+            404
+        );
 
-        abort_if(! Storage::disk($document->disk)->exists($document->path), 404);
-
-        return Storage::disk($document->disk)->download(
-            $document->path,
-            $document->original_name
+        return Storage::disk($document->storage_disk)->download(
+            $document->storage_path,
+            $document->original_filename,
+            ['X-Content-Type-Options' => 'nosniff']
         );
     }
 
-    public function verify(int $file): RedirectResponse
+    public function verify(Request $request, int $file): RedirectResponse
     {
-        $document = DB::table('files')
-            ->where('id', $file)
-            ->first();
+        $document = $this->findOwnUserUpload($request, $file);
 
-        abort_if(! $document, 404);
-
-        abort_if(! Storage::disk($document->disk)->exists($document->path), 404);
+        abort_if(
+            ! Storage::disk($document->storage_disk)->exists($document->storage_path),
+            404
+        );
 
         $currentHash = hash_file(
             'sha256',
-            Storage::disk($document->disk)->path($document->path)
+            Storage::disk($document->storage_disk)->path($document->storage_path)
         );
 
-        if (! hash_equals($document->sha256_hash, $currentHash)) {
+        if (! hash_equals($document->sha256, $currentHash)) {
             return back()->withErrors([
                 'document' => 'Hash se ne podudara. Dokument je možda izmijenjen.',
             ]);
         }
 
         return back()->with('success', 'SHA-256 provjera je uspješna. Dokument nije promijenjen.');
+    }
+
+    /**
+     * Base query scoped to the authenticated user's own user_upload documents.
+     * Both conditions (owner + purpose) are always applied together so the
+     * Documents module can never reach another user's row or a row belonging to
+     * a different purpose (draft_pdf, final_pdf, certificate, identity_capture,
+     * cms_signature, ...).
+     */
+    private function ownUserUploadsQuery(Request $request)
+    {
+        return StoredFile::query()
+            ->where('created_by_user_id', $request->user()->id)
+            ->where('purpose', StoredFile::PURPOSE_USER_UPLOAD);
+    }
+
+    /**
+     * Resolve a single own user_upload document or abort 404. A missing id, a
+     * foreign owner, or any non-user_upload purpose all resolve to 404 without
+     * disclosing whether the underlying file row exists.
+     */
+    private function findOwnUserUpload(Request $request, int $file): StoredFile
+    {
+        $document = $this->ownUserUploadsQuery($request)
+            ->where('id', $file)
+            ->first();
+
+        abort_if($document === null, 404);
+
+        return $document;
     }
 }

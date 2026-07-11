@@ -33,25 +33,6 @@
                 @csrf
 
                 <div>
-                    <label for="title" class="block text-sm font-medium text-slate-200">
-                        Naziv dokumenta
-                    </label>
-
-                    <input
-                        id="title"
-                        name="title"
-                        type="text"
-                        value="{{ old('title') }}"
-                        class="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-300/50 focus:ring-2 focus:ring-cyan-300/20"
-                        placeholder="Npr. Kupoprodajni ugovor"
-                    >
-
-                    <p class="mt-2 text-xs text-slate-500">
-                        Ako ostaviš prazno, koristit će se originalni naziv datoteke.
-                    </p>
-                </div>
-
-                <div>
                     <label for="document" class="block text-sm font-medium text-slate-200">
                         Dokument
                     </label>

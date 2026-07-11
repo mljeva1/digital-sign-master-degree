@@ -12,7 +12,7 @@
     <div class="mx-auto max-w-4xl px-5 py-8">
         <header class="border-b border-white/10 pb-6">
             <p class="text-sm font-semibold uppercase tracking-[0.28em] text-cyan-200">Dokument</p>
-            <h1 class="mt-3 text-3xl font-semibold text-white">{{ $document->original_name }}</h1>
+            <h1 class="mt-3 text-3xl font-semibold text-white">{{ $document->original_filename ?? 'Dokument' }}</h1>
             <p class="mt-2 text-sm text-slate-400">
                 Metadata, storage lokacija i SHA-256 provjera integriteta.
             </p>
@@ -39,24 +39,7 @@
                 <dl class="grid gap-5">
                     <div>
                         <dt class="text-xs uppercase tracking-[0.22em] text-slate-500">Originalni naziv</dt>
-                        <dd class="mt-2 text-sm text-white">{{ $document->original_name }}</dd>
-                    </div>
-
-                    <div>
-                        <dt class="text-xs uppercase tracking-[0.22em] text-slate-500">Spremljeni naziv</dt>
-                        <dd class="mt-2 text-sm text-white">{{ $document->stored_name }}</dd>
-                    </div>
-
-                    <div>
-                        <dt class="text-xs uppercase tracking-[0.22em] text-slate-500">Disk</dt>
-                        <dd class="mt-2 text-sm text-white">{{ $document->disk }}</dd>
-                    </div>
-
-                    <div>
-                        <dt class="text-xs uppercase tracking-[0.22em] text-slate-500">Private path</dt>
-                        <dd class="mt-2 break-all rounded-2xl bg-slate-950/70 px-4 py-3 text-sm text-cyan-100">
-                            {{ $document->path }}
-                        </dd>
+                        <dd class="mt-2 text-sm text-white">{{ $document->original_filename ?? 'Dokument' }}</dd>
                     </div>
 
                     <div>
@@ -66,13 +49,18 @@
 
                     <div>
                         <dt class="text-xs uppercase tracking-[0.22em] text-slate-500">Veličina</dt>
-                        <dd class="mt-2 text-sm text-white">{{ number_format($document->size_bytes / 1024, 2) }} KB</dd>
+                        <dd class="mt-2 text-sm text-white">{{ $document->size_bytes !== null ? number_format($document->size_bytes / 1024, 2).' KB' : 'N/A' }}</dd>
+                    </div>
+
+                    <div>
+                        <dt class="text-xs uppercase tracking-[0.22em] text-slate-500">Vrijeme uploada</dt>
+                        <dd class="mt-2 text-sm text-white">{{ optional($document->created_at)->format('d.m.Y. H:i') ?? 'N/A' }}</dd>
                     </div>
 
                     <div>
                         <dt class="text-xs uppercase tracking-[0.22em] text-slate-500">SHA-256 hash</dt>
                         <dd class="mt-2 break-all rounded-2xl bg-slate-950/70 px-4 py-3 font-mono text-xs text-emerald-200">
-                            {{ $document->sha256_hash }}
+                            {{ $document->sha256 }}
                         </dd>
                     </div>
                 </dl>

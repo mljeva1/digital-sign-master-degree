@@ -27,6 +27,8 @@ final class StoredFile extends Model
 
     public const PURPOSE_IDENTITY_CAPTURE = 'identity_capture';
 
+    public const PURPOSE_USER_UPLOAD = 'user_upload';
+
     public const DISK_LOCAL = 'local';
 
     public const DISK_S3 = 's3';

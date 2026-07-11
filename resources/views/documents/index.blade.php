@@ -64,7 +64,7 @@
                             @forelse ($documents as $document)
                                 <tr class="transition hover:bg-white/[0.03]">
                                     <td class="px-5 py-4 text-sm font-medium text-white">
-                                        {{ $document->original_name }}
+                                        {{ $document->original_filename ?? 'Dokument' }}
                                     </td>
 
                                     <td class="px-5 py-4 text-sm text-slate-400">
@@ -72,12 +72,12 @@
                                     </td>
 
                                     <td class="px-5 py-4 text-sm text-slate-400">
-                                        {{ number_format($document->size_bytes / 1024, 2) }} KB
+                                        {{ $document->size_bytes !== null ? number_format($document->size_bytes / 1024, 2).' KB' : 'N/A' }}
                                     </td>
 
                                     <td class="px-5 py-4">
                                         <code class="block max-w-xs truncate rounded-xl bg-slate-950/70 px-3 py-2 text-xs text-cyan-200">
-                                            {{ $document->sha256_hash }}
+                                            {{ $document->sha256 }}
                                         </code>
                                     </td>
 
