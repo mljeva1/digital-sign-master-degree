@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AuditEvent;
 use App\Models\Contract;
 use App\Models\StoredFile;
+use App\Models\UserContractProfile;
 use App\Services\Audit\AuditLogger;
 use App\Services\Contracts\ContractRequiredFieldsValidator;
 use App\Services\Contracts\FinalPdfGenerator;
@@ -21,6 +22,31 @@ use Illuminate\View\View;
 
 class ContractController extends Controller
 {
+    /**
+     * Labels for the profile fields required before a builder party autofill
+     * is offered. Order matches `UserContractProfile::missingContractAutofillFields()`.
+     *
+     * @var array<string, string>
+     */
+    private const PARTY_PROFILE_REQUIRED_FIELD_LABELS = [
+        'first_name' => 'Ime',
+        'last_name' => 'Prezime',
+        'oib' => 'OIB',
+        'address_line1' => 'Adresa (ulica i kućni broj)',
+        'postal_code' => 'Poštanski broj',
+        'city' => 'Grad',
+    ];
+
+    /**
+     * Matches the `seller_name`/`buyer_name` max length in storeSnapshot().
+     */
+    private const PARTY_PROFILE_NAME_MAX_LENGTH = 250;
+
+    /**
+     * Matches the `seller_address`/`buyer_address` max length in storeSnapshot().
+     */
+    private const PARTY_PROFILE_ADDRESS_MAX_LENGTH = 300;
+
     public function __construct(
         private readonly AuditLogger $auditLogger,
         private readonly FinalPdfGenerator $finalPdfGenerator
@@ -73,13 +99,14 @@ class ContractController extends Controller
         ]);
     }
 
-    public function create(): View
+    public function create(Request $request): View
     {
         return view('contracts.builder', [
             'contractId' => null,
             'snapshot' => [],
             'contractStatus' => null,
             'contractUpdatedAt' => null,
+            'partyProfileAutofill' => $this->partyProfileAutofillPayload($request->user()->contractProfile),
         ]);
     }
 
@@ -93,6 +120,7 @@ class ContractController extends Controller
             'snapshot' => $contract->filled_data_snapshot ?? [],
             'contractStatus' => $contract->status,
             'contractUpdatedAt' => $contract->updated_at?->toIso8601String(),
+            'partyProfileAutofill' => $this->partyProfileAutofillPayload($request->user()->contractProfile),
         ]);
     }
 
@@ -538,6 +566,115 @@ class ContractController extends Controller
     public function vehicleSalesPreview(): View
     {
         return view('contracts.preview.vehicle-sales-contract');
+    }
+
+    /**
+     * Build the builder-only, transient party-autofill payload for the authenticated
+     * user's profile. Never includes `phone`/`country_code`, and only includes the
+     * composed `name`/`address`/`oib` values when the profile has every required
+     * field AND the composed name/address are within the snapshot's own field
+     * length limits — an incomplete or overlong profile yields `available: false`
+     * with `missing_labels`/`invalid_labels` instead of any partial value, so the
+     * Blade/JS layer can never assemble a partial autofill from this payload.
+     * The address is built by `composePartyProfileAddress()` below, a deliberately
+     * separate, narrower composition than `UserContractProfile::fullAddress()` —
+     * it never appends `country_code`, by key or by value.
+     *
+     * @return array{
+     *     available: bool,
+     *     name?: string,
+     *     address?: string,
+     *     oib?: string,
+     *     missing_labels: list<string>,
+     *     invalid_labels: list<string>,
+     *     profile_edit_url: string,
+     * }
+     */
+    private function partyProfileAutofillPayload(?UserContractProfile $profile): array
+    {
+        $profileEditUrl = route('profile.edit');
+
+        if ($profile === null) {
+            return [
+                'available' => false,
+                'missing_labels' => array_values(self::PARTY_PROFILE_REQUIRED_FIELD_LABELS),
+                'invalid_labels' => [],
+                'profile_edit_url' => $profileEditUrl,
+            ];
+        }
+
+        $missingFields = $profile->missingContractAutofillFields();
+        $missingLabels = array_map(
+            static fn (string $field): string => self::PARTY_PROFILE_REQUIRED_FIELD_LABELS[$field],
+            $missingFields
+        );
+
+        $nameFieldsMissing = array_intersect(['first_name', 'last_name'], $missingFields) !== [];
+        $addressFieldsMissing = array_intersect(['address_line1', 'postal_code', 'city'], $missingFields) !== [];
+
+        $invalidLabels = [];
+        $name = null;
+        $address = null;
+
+        if (! $nameFieldsMissing) {
+            $name = $profile->displayName();
+
+            if (mb_strlen($name) > self::PARTY_PROFILE_NAME_MAX_LENGTH) {
+                $invalidLabels[] = 'Ime i prezime (predugačko za automatsko popunjavanje ugovora)';
+                $name = null;
+            }
+        }
+
+        if (! $addressFieldsMissing) {
+            $address = $this->composePartyProfileAddress($profile);
+
+            if (mb_strlen($address) > self::PARTY_PROFILE_ADDRESS_MAX_LENGTH) {
+                $invalidLabels[] = 'Adresa (predugačka za automatsko popunjavanje ugovora)';
+                $address = null;
+            }
+        }
+
+        if ($missingFields !== [] || $invalidLabels !== []) {
+            return [
+                'available' => false,
+                'missing_labels' => $missingLabels,
+                'invalid_labels' => $invalidLabels,
+                'profile_edit_url' => $profileEditUrl,
+            ];
+        }
+
+        return [
+            'available' => true,
+            'name' => $name,
+            'address' => $address,
+            'oib' => (string) $profile->oib,
+            'missing_labels' => [],
+            'invalid_labels' => [],
+            'profile_edit_url' => $profileEditUrl,
+        ];
+    }
+
+    /**
+     * Compose the M7.3 builder address from exactly `address_line1` + `address_line2`
+     * + `postal_code` + `city` — deliberately narrower than
+     * `UserContractProfile::fullAddress()`, which also appends a non-HR
+     * `country_code`. This method never reads `country_code` at all, so neither
+     * its key nor its value can ever reach the builder autofill address.
+     *
+     * Does not modify or call `fullAddress()` itself, since other features
+     * (e.g. the profile edit view) rely on its country-code-aware behavior.
+     */
+    private function composePartyProfileAddress(UserContractProfile $profile): string
+    {
+        $cityLine = trim((string) $profile->postal_code.' '.(string) $profile->city);
+
+        $segments = [
+            $profile->address_line1,
+            $profile->address_line2,
+            $cityLine !== '' ? $cityLine : null,
+        ];
+
+        return implode(', ', array_filter($segments, static fn ($segment): bool => filled($segment)));
     }
 
     private function resolveAccessibleDraftPdf(Request $request, Contract $contract): StoredFile

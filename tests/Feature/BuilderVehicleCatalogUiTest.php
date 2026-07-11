@@ -13,6 +13,7 @@ class BuilderVehicleCatalogUiTest extends TestCase
     {
         parent::setUp();
 
+        Schema::dropIfExists('user_contract_profiles');
         Schema::dropIfExists('users');
 
         Schema::create('users', function (Blueprint $table): void {
@@ -24,10 +25,31 @@ class BuilderVehicleCatalogUiTest extends TestCase
             $table->rememberToken();
             $table->timestamps();
         });
+
+        // The builder route resolves the authenticated user's contract profile
+        // (M7.3 party autofill); this table must exist even though these tests
+        // never populate it.
+        Schema::create('user_contract_profiles', function (Blueprint $table): void {
+            $table->id();
+            $table->foreignId('user_id')->unique()->constrained('users')->cascadeOnDelete();
+            $table->string('first_name', 100)->nullable();
+            $table->string('last_name', 100)->nullable();
+            $table->string('oib', 11)->nullable();
+            $table->string('address_line1', 200)->nullable();
+            $table->string('address_line2', 200)->nullable();
+            $table->string('city', 100)->nullable();
+            $table->string('postal_code', 20)->nullable();
+            $table->string('country_code', 2)->nullable();
+            $table->string('phone', 30)->nullable();
+            $table->timestamps();
+
+            $table->index('oib');
+        });
     }
 
     protected function tearDown(): void
     {
+        Schema::dropIfExists('user_contract_profiles');
         Schema::dropIfExists('users');
 
         parent::tearDown();

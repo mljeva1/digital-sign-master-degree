@@ -67,6 +67,44 @@
                     <section class="rounded-[1.75rem] border border-white/10 bg-white/[0.04] p-5">
                         <p class="text-sm font-semibold uppercase tracking-[0.22em] text-emerald-200">1 · Prodavatelj i kupac</p>
 
+                        <div class="mt-4 rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+                            <p class="text-xs font-semibold uppercase tracking-wider text-slate-300">Moja uloga u ugovoru</p>
+                            <p class="mt-1 text-xs text-slate-400">
+                                Moj profil se može primijeniti samo na jednu ugovornu stranu odjednom — odabir druge strane uklanja neizmijenjeni autofill s prethodne.
+                            </p>
+
+                            <div class="mt-3 flex flex-wrap gap-3" role="radiogroup" aria-label="Popuni prodavatelja ili kupca iz mog profila">
+                                <label class="flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm text-slate-200 transition has-[:checked]:border-emerald-300/50 has-[:checked]:bg-emerald-300/10 has-[:checked]:text-emerald-100">
+                                    <input type="radio" name="party_profile_choice" id="partyProfileChoiceSeller" value="seller" class="h-4 w-4">
+                                    Ja sam prodavatelj
+                                </label>
+                                <label class="flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm text-slate-200 transition has-[:checked]:border-cyan-300/50 has-[:checked]:bg-cyan-300/10 has-[:checked]:text-cyan-100">
+                                    <input type="radio" name="party_profile_choice" id="partyProfileChoiceBuyer" value="buyer" class="h-4 w-4">
+                                    Ja sam kupac
+                                </label>
+                                <label class="flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm text-slate-200 transition has-[:checked]:border-white/40 has-[:checked]:bg-white/10 has-[:checked]:text-white">
+                                    <input type="radio" name="party_profile_choice" id="partyProfileChoiceManual" value="manual" class="h-4 w-4" checked>
+                                    Ručni unos
+                                </label>
+                            </div>
+
+                            <div id="partyProfileIncompleteNotice" class="mt-3 hidden rounded-xl border border-amber-300/20 bg-amber-300/[0.07] px-4 py-3 text-xs text-amber-100">
+                                <p class="font-semibold">Profil nije spreman za automatsko popunjavanje ugovora.</p>
+
+                                <div id="partyProfileMissingBlock" class="mt-2 hidden">
+                                    <p class="font-semibold">Nedostaju:</p>
+                                    <ul id="partyProfileMissingList" class="mt-1 list-disc space-y-0.5 pl-4"></ul>
+                                </div>
+
+                                <div id="partyProfileInvalidBlock" class="mt-2 hidden">
+                                    <p class="font-semibold">Nevažeće za automatsko popunjavanje:</p>
+                                    <ul id="partyProfileInvalidList" class="mt-1 list-disc space-y-0.5 pl-4"></ul>
+                                </div>
+
+                                <a href="{{ route('profile.edit') }}" class="mt-3 inline-block font-semibold text-amber-200 underline">Uredi profil</a>
+                            </div>
+                        </div>
+
                         <div class="mt-5 grid gap-6 sm:grid-cols-2">
                             <fieldset class="grid gap-4">
                                 <legend class="text-xs font-bold uppercase tracking-wider text-emerald-100">Prodavatelj</legend>
@@ -409,6 +447,9 @@
             const finalizeUrl = @json($contractId ? route('contracts.finalize.store', $contractId) : null);
             const vehicleCatalogSearchUrl = @json(route('vehicle-catalog.search'));
             const initialSnapshot = @json($snapshot);
+            // PII-bearing payload: serialized via Illuminate\Support\Js::from()
+            // (the Blade at-js directive below), never interpolated as a raw string.
+            const profileAutofillPayload = @js($partyProfileAutofill);
             let currentContractId = @json($contractId);
             let hasUnsavedChanges = false;
 
@@ -418,6 +459,13 @@
             const vehicleCatalogNoResults = document.getElementById('vehicleCatalogNoResults');
             const vehicleCatalogError = document.getElementById('vehicleCatalogError');
             const vehicleCatalogSelected = document.getElementById('vehicleCatalogSelected');
+
+            const partyProfileChoiceRadios = form.querySelectorAll('input[name="party_profile_choice"]');
+            const partyProfileIncompleteNotice = document.getElementById('partyProfileIncompleteNotice');
+            const partyProfileMissingBlock = document.getElementById('partyProfileMissingBlock');
+            const partyProfileMissingList = document.getElementById('partyProfileMissingList');
+            const partyProfileInvalidBlock = document.getElementById('partyProfileInvalidBlock');
+            const partyProfileInvalidList = document.getElementById('partyProfileInvalidList');
 
             const formatDate = (value) => {
                 if (! value) {
@@ -582,30 +630,37 @@
                 return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
             };
 
+            // Returns true when the field now holds `value` (whether just written or
+            // already equal), false when nothing was written (missing field, blank
+            // value, or a non-empty field protected by overwrite:false). Callers that
+            // need to track "did autofill actually write this field" use this return
+            // value instead of assuming every call wrote something.
             const setFieldValue = (fieldName, value, options = {}) => {
                 const { overwrite = true } = options;
 
                 if (value === null || value === undefined || value === '') {
-                    return;
+                    return false;
                 }
 
                 const field = form.querySelector(`[data-field="${fieldName}"]`);
 
                 if (! field) {
-                    return;
+                    return false;
                 }
 
                 if (! overwrite && field.value.trim() !== '') {
-                    return;
+                    return false;
                 }
 
                 if (field.value === value) {
-                    return;
+                    return true;
                 }
 
                 field.value = value;
                 field.dispatchEvent(new Event('input', { bubbles: true }));
                 field.dispatchEvent(new Event('change', { bubbles: true }));
+
+                return true;
             };
 
             const hideAllVehicleCatalogStates = () => {
@@ -869,6 +924,180 @@
                 ) {
                     vehicleCatalogResults.classList.add('hidden');
                 }
+            });
+
+            // M7.3 — builder party autofill from the authenticated user's own profile.
+            // Transient UI state only: the radio choice itself carries no `data-field`,
+            // so it is never part of collectValues()/the saved snapshot and is never audited.
+            const PARTY_PROFILE_TARGET_FIELDS = {
+                seller: ['seller_name', 'seller_address', 'seller_oib'],
+                buyer: ['buyer_name', 'buyer_address', 'buyer_oib'],
+            };
+
+            // Explicit write-in-progress guard: true only while this script itself is
+            // writing or clearing an autofilled field, so the manual-edit listener
+            // below can tell a real, later user keystroke apart from our own writes.
+            let isApplyingPartyProfileAutofill = false;
+
+            // Which radio is currently the visible/checked choice ('seller'|'buyer'|null
+            // for manual). Drives the UI only — NOT the source of truth for which
+            // fields autofill actually wrote (see trackedAutofillValues below).
+            let activePartyProfileRole = null;
+
+            // Per-field record of exactly what profile autofill wrote into that field,
+            // e.g. { seller_oib: '12345678901' }. A field is only ever present here
+            // while its live value still matches what autofill wrote — a real user
+            // edit (or a cross-role cleanup below) removes its entry. This is what
+            // lets us tell "autofill actually wrote this field and it is still
+            // unedited" apart from "this field merely belongs to the active role",
+            // fixing the case where a pre-existing non-empty field (never written by
+            // autofill, because setFieldValue's overwrite:false skipped it) must not
+            // be treated as autofilled. Persists across a switch to manual entry, so
+            // a later opposite-role selection can still find and clear it.
+            const trackedAutofillValues = {};
+
+            const setPartyProfileChoice = (value) => {
+                partyProfileChoiceRadios.forEach((radio) => {
+                    radio.checked = radio.value === value;
+                });
+            };
+
+            const renderLabelList = (listElement, blockElement, labels) => {
+                if (! listElement || ! blockElement) {
+                    return;
+                }
+
+                listElement.replaceChildren(
+                    ...labels.map((label) => {
+                        const item = document.createElement('li');
+                        item.textContent = label;
+
+                        return item;
+                    })
+                );
+                blockElement.classList.toggle('hidden', labels.length === 0);
+            };
+
+            const hidePartyProfileIncompleteNotice = () => {
+                partyProfileIncompleteNotice?.classList.add('hidden');
+                renderLabelList(partyProfileMissingList, partyProfileMissingBlock, []);
+                renderLabelList(partyProfileInvalidList, partyProfileInvalidBlock, []);
+            };
+
+            const showPartyProfileIncompleteNotice = () => {
+                if (! partyProfileIncompleteNotice) {
+                    return;
+                }
+
+                renderLabelList(partyProfileMissingList, partyProfileMissingBlock, profileAutofillPayload.missing_labels || []);
+                renderLabelList(partyProfileInvalidList, partyProfileInvalidBlock, profileAutofillPayload.invalid_labels || []);
+                partyProfileIncompleteNotice.classList.remove('hidden');
+            };
+
+            // Clears only the OTHER role's fields that autofill previously wrote and
+            // that still hold exactly that written value untouched — never a
+            // pre-existing value, and never a value the user has since edited. This
+            // is what guarantees the same profile can never end up applied to both
+            // seller and buyer at once, including across a seller -> manual -> buyer
+            // detour (trackedAutofillValues persists through a manual selection).
+            const clearUntouchedAutofillForOtherRole = (role) => {
+                const otherRole = role === 'seller' ? 'buyer' : 'seller';
+
+                PARTY_PROFILE_TARGET_FIELDS[otherRole].forEach((otherFieldName) => {
+                    if (! (otherFieldName in trackedAutofillValues)) {
+                        return;
+                    }
+
+                    const otherField = form.querySelector(`[data-field="${otherFieldName}"]`);
+
+                    if (otherField && otherField.value === trackedAutofillValues[otherFieldName]) {
+                        isApplyingPartyProfileAutofill = true;
+                        otherField.value = '';
+                        otherField.dispatchEvent(new Event('input', { bubbles: true }));
+                        otherField.dispatchEvent(new Event('change', { bubbles: true }));
+                        isApplyingPartyProfileAutofill = false;
+                    }
+
+                    // Removed either way: cleared above, or already diverged from what
+                    // autofill wrote (the edit listener should have removed it already;
+                    // this is defense-in-depth so a stale entry never lingers).
+                    delete trackedAutofillValues[otherFieldName];
+                });
+            };
+
+            const applyPartyProfileAutofill = (role) => {
+                if (! profileAutofillPayload.available) {
+                    showPartyProfileIncompleteNotice();
+                    activePartyProfileRole = null;
+
+                    return;
+                }
+
+                clearUntouchedAutofillForOtherRole(role);
+                hidePartyProfileIncompleteNotice();
+
+                isApplyingPartyProfileAutofill = true;
+
+                [
+                    [`${role}_name`, profileAutofillPayload.name],
+                    [`${role}_address`, profileAutofillPayload.address],
+                    [`${role}_oib`, profileAutofillPayload.oib],
+                ].forEach(([fieldName, value]) => {
+                    if (setFieldValue(fieldName, value, { overwrite: false })) {
+                        trackedAutofillValues[fieldName] = value;
+                    }
+                });
+
+                isApplyingPartyProfileAutofill = false;
+
+                activePartyProfileRole = role;
+            };
+
+            partyProfileChoiceRadios.forEach((radio) => {
+                radio.addEventListener('change', (event) => {
+                    // A choice change alone (with no resulting field value change)
+                    // must not mark the snapshot as dirty.
+                    event.stopPropagation();
+
+                    if (radio.value === 'manual') {
+                        activePartyProfileRole = null;
+                        hidePartyProfileIncompleteNotice();
+
+                        return;
+                    }
+
+                    applyPartyProfileAutofill(radio.value);
+                });
+            });
+
+            Object.values(PARTY_PROFILE_TARGET_FIELDS).flat().forEach((fieldName) => {
+                const field = form.querySelector(`[data-field="${fieldName}"]`);
+
+                field?.addEventListener('input', () => {
+                    // Ignore writes made by this script itself (autofill or cleanup).
+                    if (isApplyingPartyProfileAutofill) {
+                        return;
+                    }
+
+                    // Only a field autofill actually wrote — and that still holds
+                    // exactly that written value — counts as "autofilled" here. A
+                    // pre-existing non-empty field that autofill skipped (overwrite:
+                    // false) is never in trackedAutofillValues, so editing it never
+                    // resets the visible choice. This runs regardless of the current
+                    // radio selection (including while on "Ručni unos"), so the
+                    // tracking stays accurate for a later opposite-role selection.
+                    if (! (fieldName in trackedAutofillValues)) {
+                        return;
+                    }
+
+                    if (field.value === trackedAutofillValues[fieldName]) {
+                        return;
+                    }
+
+                    delete trackedAutofillValues[fieldName];
+                    activePartyProfileRole = null;
+                    setPartyProfileChoice('manual');
+                });
             });
 
             hydrateForm(initialSnapshot);
