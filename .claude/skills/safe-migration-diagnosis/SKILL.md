@@ -39,15 +39,17 @@ Use manually whenever a task involves a suspected missing column, migration erro
 5. Compare:
 - migration file(s);
 - migrations table;
- -physical schema;
+- physical schema;
 - current controller/model/service code;
 - current Git diff.
 
-6. Inspect tests and identify whether they:
-- use actual Laravel migrations;
-- hand-build a simplified schema;
-- prove PostgreSQL constraints;
-- prove only application behavior.
+6. Inspect the tests relevant to the affected area and identify **every** test file that hand-builds a simplified schema in `setUp()` instead of running real migrations (several feature suites do this — do not assume it is only one file). For each, state whether it:
+- uses actual Laravel migrations;
+- hand-builds a simplified schema;
+- proves PostgreSQL constraints;
+- proves only application behavior.
+
+A green SQLite suite never proves a PostgreSQL CHECK/DDL claim; only a direct read-only physical-schema check does.
 
 7. Report:
 - confirmed facts;

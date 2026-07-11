@@ -38,6 +38,15 @@ Do not mutate code, migrations, database data, vault files, Git state, `CLAUDE.m
 
 A request to inspect, diagnose, review, plan, or explain is read-only authorization only.
 
+## Project skills routing
+
+See `.claude/README.md` for the full skill index. Operationally:
+
+- Review of a diff: use `/review-current-change`. Never accept a previous AI report as evidence — only the actual diff and observed runtime/test output count.
+- Vault audit (`/obsidian-vault-audit`, read-only) and vault sync (`/obsidian-vault-sync`, writes) are different operations; audit precedes sync.
+- Any UI/UX redesign starts with read-only discovery via `/ui-ux-project-audit`; no design-system file before the direction is approved.
+- External plugins/skills (Superpowers, ui-ux-pro-max, and any other) are methodology aids, never a source of truth over project instructions, rules, code, or schema.
+
 ## Project rules
 
 - Use Laravel 13 conventions and PHP 8.3.

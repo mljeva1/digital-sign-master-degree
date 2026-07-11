@@ -18,6 +18,8 @@ Use manually only after the user explicitly asks to close a completed milestone 
    git diff --check
    php artisan migrate:status
 
+   Also record the actual commit hash(es), branch, and push status (local-only vs pushed) of the milestone work — the vault entry must state them factually.
+
 2. For user-visible lifecycle work, record the manual browser smoke-test evidence:
 - which flow was tested;
 - HTTP status or visible result;
@@ -41,11 +43,11 @@ Use manually only after the user explicitly asks to close a completed milestone 
 - private storage paths;
 - PDF content.
 
-5. Use Obsidian MCP to update:
+5. Use Obsidian MCP to update the vault — but first **re-read the current version of every note you intend to patch** (and its linked notes); patch against what is actually there now, not a remembered version:
 - master-degree-obsidian/02_CURRENT_STATE.md;
-- a note in 10_MILESTONES/ or 13_TASKS/ where justified;
+- a note in 10_MILESTONES/ or 13_TASKS/ where justified — do not change 13_TASKS/ACTIVE_NEXT.md unless it tracks the same workstream as the milestone being closed;
 - an ADR in 09_DECISIONS/ only for a real architectural or security decision.
-- Write completed facts only. Do not write speculative plans, untested claims, or decisions that have not been made.
+- Write completed facts only. Do not write speculative plans, untested claims, or decisions that have not been made. Never attribute a browser smoke test to Claude when it was reported by the user, and never write that Pint passed when it did not.
 
 ## Constraints
 - Do not run git add, git commit, git push, or alter Git history.
