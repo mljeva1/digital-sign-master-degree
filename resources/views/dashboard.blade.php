@@ -1,64 +1,92 @@
-<!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Dashboard | Digital Sign Master Degree</title>
+<x-app-layout title="Dashboard" active="dashboard" max-width="max-w-5xl">
+    <x-page-header
+        title="Dashboard"
+        subtitle="Pregled i brzi ulaz u izradu, provjeru i upravljanje dokumentima."
+    />
 
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-</head>
+    <x-flash />
 
-<body class="min-h-screen bg-slate-950 text-slate-100 antialiased">
-    <div class="mx-auto flex min-h-screen max-w-5xl flex-col px-5 py-8">
-        <header class="flex items-center justify-between border-b border-white/10 pb-5">
-            <div>
-                <p class="text-sm font-semibold tracking-[0.28em] text-cyan-200">DSMD</p>
-                <h1 class="mt-2 text-2xl font-semibold text-white">Dashboard</h1>
-            </div>
-            <div class="flex gap-3">
-                <a href="{{ route('contracts.index') }}" class="inline-flex rounded-full border border-cyan-300/20 bg-cyan-300/10 px-6 py-3 text-sm font-bold text-cyan-100 transition hover:bg-cyan-300/15">
-                    Ugovori
-                </a>
-                <a href="{{ route('documents.index') }}" class="inline-flex rounded-full bg-cyan-300 px-6 py-3 text-sm font-bold text-slate-950 transition hover:bg-cyan-200">
-                    Dokumenti
-                </a>
-                <a href="{{ route('profile.edit') }}" class="inline-flex rounded-full border border-white/10 bg-white/5 px-6 py-3 text-sm font-bold text-white transition hover:bg-white/10">
-                    Profil
-                </a>
-            </div>
-            <form method="POST" action="{{ route('logout') }}">
-                @csrf
-                <button type="submit" class="rounded-full border border-white/10 bg-white/10 px-5 py-2 text-sm font-semibold text-white transition hover:bg-white/15">
-                    Odjava
-                </button>
-            </form>
-        </header>
+    <div class="mt-8 grid gap-5 lg:grid-cols-3">
+        <x-card class="lg:col-span-2">
+            <p class="text-xs uppercase tracking-[0.24em] text-slate-500">Prijavljeni korisnik</p>
+            <h2 class="mt-2 text-2xl font-semibold text-white">{{ $user->name }}</h2>
+            <p class="mt-1 text-sm text-slate-400">{{ $user->email }}</p>
 
-        <main class="grid flex-1 place-items-center">
-            <div class="w-full rounded-[2rem] border border-white/10 bg-white/[0.04] p-8 shadow-2xl shadow-slate-950/50">
-                @if (session('success'))
-                    <div class="mb-6 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm text-emerald-100">
-                        {{ session('success') }}
-                    </div>
-                @endif
-
-                <p class="text-sm uppercase tracking-[0.28em] text-slate-500">Prijavljeni korisnik</p>
-                <h2 class="mt-3 text-3xl font-semibold text-white">{{ auth()->user()->name }}</h2>
-                <p class="mt-2 text-slate-400">{{ auth()->user()->email }}</p><br>
-                <a href="{{ route('contracts.create') }}" class="block rounded-3xl border border-cyan-300/20 bg-cyan-300/10 p-5 transition hover:bg-cyan-300/15">
-                    <h3 class="text-lg font-semibold text-cyan-100">Novi ugovor</h3>
-                    <p class="mt-2 text-sm leading-6 text-cyan-100/80">
-                        Izrada kupoprodajnog ugovora kroz formu i live HTML preview.
-                    </p>
-                </a>
-                <div class="mt-8 rounded-3xl border border-cyan-300/20 bg-cyan-300/10 p-5">
-                    <h3 class="text-lg font-semibold text-cyan-100">Auth sloj je aktivan</h3>
-                    <p class="mt-2 text-sm leading-6 text-cyan-100/80">
-                        Sljedeći korak može biti prvi poslovni kontroler za dokumente, ugovore ili kupce.
-                    </p>
+            <dl class="mt-6 grid max-w-md grid-cols-2 gap-3">
+                <div class="rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.06] px-4 py-3">
+                    <dt class="text-xs uppercase tracking-[0.2em] text-cyan-200/80">Draft ugovori</dt>
+                    <dd class="mt-1 text-2xl font-semibold text-white">{{ $draftCount }}</dd>
                 </div>
+                <div class="rounded-2xl border border-emerald-300/15 bg-emerald-300/[0.06] px-4 py-3">
+                    <dt class="text-xs uppercase tracking-[0.2em] text-emerald-200/80">Finalizirani</dt>
+                    <dd class="mt-1 text-2xl font-semibold text-white">{{ $finalizedCount }}</dd>
+                </div>
+            </dl>
+
+            @if ($draftCount === 0 && $finalizedCount === 0)
+                <p class="mt-3 text-sm text-slate-400">
+                    Još nemaš spremljenih ugovora — započni prvi kroz builder s live pregledom.
+                </p>
+            @endif
+
+            <div class="mt-6 flex flex-wrap gap-3">
+                <x-action href="{{ route('contracts.create') }}" variant="primary">Novi ugovor</x-action>
+                <x-action href="{{ route('contracts.index') }}" variant="secondary">Moji ugovori</x-action>
+                <x-action href="{{ route('documents.index') }}" variant="secondary">Dokumenti</x-action>
             </div>
-        </main>
+        </x-card>
+
+        <x-card>
+            <div class="flex items-center justify-between gap-3">
+                <p class="text-xs uppercase tracking-[0.24em] text-slate-500">Profil za autofill</p>
+                @if ($profileReady)
+                    <x-badge tone="emerald">Spremno</x-badge>
+                @else
+                    <x-badge tone="amber">Nepotpun</x-badge>
+                @endif
+            </div>
+
+            @if ($profileReady)
+                <p class="mt-3 text-sm leading-6 text-slate-300">
+                    Tvoj profil ima ime, OIB i adresu potrebne da builder ponudi automatsko
+                    popunjavanje prodavatelja ili kupca.
+                </p>
+            @else
+                <p class="mt-3 text-sm leading-6 text-slate-300">
+                    Dopuni ime, prezime, OIB i adresu (ulica, poštanski broj i grad) da builder
+                    može ponuditi automatsko popunjavanje ugovorne strane.
+                </p>
+            @endif
+
+            <a href="{{ route('profile.edit') }}" class="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-cyan-200 transition hover:text-cyan-100">
+                Uredi profil
+                <svg viewBox="0 0 20 20" class="h-4 w-4" aria-hidden="true">
+                    <path fill="currentColor" d="M7.3 15.7a1 1 0 0 1 0-1.4L11.58 10 7.3 5.7a1 1 0 1 1 1.4-1.4l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 0 1-1.4 0Z"/>
+                </svg>
+            </a>
+        </x-card>
     </div>
-</body>
-</html>
+
+    <div class="mt-5 grid gap-5 sm:grid-cols-3">
+        <a href="{{ route('contracts.create') }}" class="group rounded-3xl border border-cyan-300/20 bg-cyan-300/[0.06] p-5 transition hover:border-cyan-300/40 hover:bg-cyan-300/10">
+            <h3 class="text-base font-semibold text-cyan-100">Izradi ugovor</h3>
+            <p class="mt-2 text-sm leading-6 text-cyan-100/70">
+                Kupoprodajni ugovor kroz formu s live pregledom.
+            </p>
+        </a>
+
+        <a href="{{ route('contracts.index') }}" class="group rounded-3xl border border-white/10 bg-white/[0.04] p-5 transition hover:border-white/20 hover:bg-white/[0.07]">
+            <h3 class="text-base font-semibold text-white">Nastavi na ugovorima</h3>
+            <p class="mt-2 text-sm leading-6 text-slate-400">
+                Draftovi, finalizacija, probni i finalni PDF te javna provjera.
+            </p>
+        </a>
+
+        <a href="{{ route('documents.index') }}" class="group rounded-3xl border border-white/10 bg-white/[0.04] p-5 transition hover:border-white/20 hover:bg-white/[0.07]">
+            <h3 class="text-base font-semibold text-white">Dokumenti</h3>
+            <p class="mt-2 text-sm leading-6 text-slate-400">
+                Privatni upload uz SHA-256 provjeru integriteta.
+            </p>
+        </a>
+    </div>
+</x-app-layout>

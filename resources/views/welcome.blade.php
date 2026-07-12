@@ -6,9 +6,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Digital Sign Master Degree</title>
 
-    <meta name="description" content="Profesionalna Laravel aplikacija za upravljanje ugovorima, dokumentima, certifikatima i digitalnim potpisima.">
+    <meta name="description" content="Laravel aplikacija za izradu kupoprodajnih ugovora, finalizaciju sa zaključavanjem sadržaja, SHA-256 provjeru integriteta, audit trag i javnu provjeru dokumenata.">
 
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+
+    <style>
+        html { -webkit-text-size-adjust: 100%; }
+        input, select, textarea { font-size: 16px; }
+        :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+            outline: 2px solid #67e8f9;
+            outline-offset: 2px;
+            border-radius: 0.5rem;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.001ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.001ms !important;
+                scroll-behavior: auto !important;
+            }
+        }
+    </style>
 </head>
 
 <body class="min-h-screen bg-slate-950 text-slate-100 antialiased selection:bg-cyan-400/30 selection:text-cyan-50">
@@ -19,35 +37,27 @@
         <div class="absolute inset-0 bg-[linear-gradient(to_right,rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[size:72px_72px] [mask-image:radial-gradient(ellipse_at_top,black_35%,transparent_75%)]"></div>
     </div>
 
-    <header class="sticky top-0 z-50 border-b border-white/10 bg-slate-950/70 backdrop-blur-xl">
-        <nav class="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-6 lg:px-8" aria-label="Glavna navigacija">
-            <a href="#" class="group flex items-center gap-3">
-                <div class="flex h-10 w-10 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 shadow-lg shadow-cyan-950/40">
-                    <svg viewBox="0 0 24 24" aria-hidden="true" class="h-5 w-5 text-cyan-200">
+    <header class="sticky top-0 z-50 border-b border-white/10 bg-slate-950/80 backdrop-blur-xl">
+        <nav class="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-3 sm:px-6 lg:px-8" aria-label="Glavna navigacija">
+            <a href="{{ route('home') }}" class="flex items-center gap-3">
+                <span class="flex h-9 w-9 items-center justify-center rounded-xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-200">
+                    <svg viewBox="0 0 24 24" aria-hidden="true" class="h-5 w-5">
                         <path fill="currentColor" d="M12 2.25 4.5 5.42v5.08c0 4.72 3.2 9.14 7.5 10.25 4.3-1.11 7.5-5.53 7.5-10.25V5.42L12 2.25Zm0 2.18 5.5 2.32v3.75c0 3.62-2.2 6.96-5.5 8.14-3.3-1.18-5.5-4.52-5.5-8.14V6.75L12 4.43Z"/>
                         <path fill="currentColor" d="M10.77 14.8 7.95 12l1.06-1.06 1.76 1.75 4.21-4.21 1.07 1.06-5.28 5.26Z"/>
                     </svg>
-                </div>
-                <div>
-                    <p class="text-sm font-semibold tracking-[0.28em] text-cyan-200">DSMD</p>
-                    <p class="text-xs text-slate-400">Digital Signing Platform</p>
-                </div>
+                </span>
+                <span class="hidden sm:block">
+                    <span class="block text-sm font-semibold tracking-[0.24em] text-cyan-100">DSMD</span>
+                    <span class="block text-xs text-slate-400">Ugovori i integritet dokumenata</span>
+                </span>
             </a>
 
-            <div class="hidden items-center gap-8 md:flex">
-                <a href="#platform" class="text-sm font-medium text-slate-300 transition hover:text-white">Platforma</a>
-                <a href="#workflow" class="text-sm font-medium text-slate-300 transition hover:text-white">Proces</a>
-                <a href="#security" class="text-sm font-medium text-slate-300 transition hover:text-white">Sigurnost</a>
-                <a href="#data-model" class="text-sm font-medium text-slate-300 transition hover:text-white">Model podataka</a>
-            </div>
-
-            {{-- auth --}}
-            <div class="hidden items-center gap-3 md:flex">
+            <div class="flex items-center gap-2 sm:gap-3">
                 @guest
                     <button
                         type="button"
                         data-auth-open="login"
-                        class="rounded-full border border-white/10 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:border-cyan-300/40 hover:bg-cyan-300/10"
+                        class="inline-flex min-h-[44px] items-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:border-cyan-300/40 hover:bg-cyan-300/10"
                     >
                         Prijava
                     </button>
@@ -55,20 +65,20 @@
                     <button
                         type="button"
                         data-auth-open="register"
-                        class="rounded-full bg-cyan-300 px-5 py-2.5 text-sm font-bold text-slate-950 shadow-sm transition hover:bg-cyan-200"
+                        class="inline-flex min-h-[44px] items-center rounded-xl bg-cyan-300 px-4 py-2 text-sm font-bold text-slate-950 transition hover:bg-cyan-200"
                     >
                         Registracija
                     </button>
                 @endguest
 
                 @auth
-                    <a href="{{ route('dashboard') }}" class="rounded-full bg-cyan-300 px-5 py-2.5 text-sm font-bold text-slate-950 shadow-sm transition hover:bg-cyan-200">
+                    <a href="{{ route('dashboard') }}" class="inline-flex min-h-[44px] items-center rounded-xl bg-cyan-300 px-4 py-2 text-sm font-bold text-slate-950 transition hover:bg-cyan-200">
                         Dashboard
                     </a>
 
                     <form method="POST" action="{{ route('logout') }}">
                         @csrf
-                        <button type="submit" class="rounded-full border border-white/10 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:border-red-300/40 hover:bg-red-300/10">
+                        <button type="submit" class="inline-flex min-h-[44px] items-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:border-red-300/40 hover:bg-red-300/10">
                             Odjava
                         </button>
                     </form>
@@ -78,139 +88,107 @@
     </header>
 
     <main>
-        <section class="relative overflow-hidden px-5 py-20 sm:px-6 sm:py-24 lg:px-8 lg:py-28">
-            <div class="mx-auto grid max-w-7xl items-center gap-14 lg:grid-cols-[1.02fr_0.98fr]">
+        <section class="px-5 py-16 sm:px-6 sm:py-20 lg:px-8">
+            <div class="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-[1.05fr_0.95fr]">
                 <div>
-                    <div class="inline-flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-300/10 px-4 py-2 text-sm text-emerald-100 shadow-lg shadow-emerald-950/20">
-                        <span class="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_18px_rgba(110,231,183,0.9)]"></span>
-                        Lokalni razvoj · PostgreSQL · Laravel · Digitalni potpisi
-                    </div>
-
-                    <h1 class="mt-8 max-w-5xl text-4xl font-semibold tracking-tight text-white sm:text-5xl lg:text-7xl">
-                        Profesionalno upravljanje ugovorima i digitalnim potpisivanjem.
-                    </h1>
-
-                    <p class="mt-7 max-w-2xl text-base leading-8 text-slate-300 sm:text-lg">
-                        Sustav za izradu, provjeru, auditiranje i potpisivanje dokumenata kroz jasno definirane tokove:
-                        korisnici, kupci, vozila, predlošci, PDF dokumenti, certifikati, hash vrijednosti i audit događaji.
+                    <p class="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-sm text-cyan-100">
+                        <span class="h-2 w-2 rounded-full bg-cyan-300"></span>
+                        Laravel · PostgreSQL · Privatna pohrana dokumenata
                     </p>
 
-                    <div class="mt-10 flex flex-col gap-3 sm:flex-row">
-                    @guest
-                        <button
-                            type="button"
-                            data-auth-open="login"
-                            class="inline-flex items-center justify-center rounded-full bg-cyan-300 px-6 py-3 text-sm font-bold text-slate-950 shadow-2xl shadow-cyan-950/30 transition hover:bg-cyan-200"
-                        >
-                            Uđi u sustav
-                            <svg viewBox="0 0 20 20" aria-hidden="true" class="ml-2 h-4 w-4">
-                                <path fill="currentColor" d="M12.293 4.293a1 1 0 0 1 1.414 0l5 5a1 1 0 0 1 0 1.414l-5 5a1 1 0 1 1-1.414-1.414L15.586 11H2a1 1 0 1 1 0-2h13.586l-3.293-3.293a1 1 0 0 1 0-1.414Z"/>
-                            </svg>
-                        </button>
+                    <h1 class="mt-7 max-w-2xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">
+                        Izrada, finalizacija i provjera ugovora s dokazivim integritetom.
+                    </h1>
 
-                        <button
-                            type="button"
-                            data-auth-open="register"
-                            class="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-6 py-3 text-sm font-bold text-white transition hover:border-white/20 hover:bg-white/10"
-                        >
-                            Kreiraj račun
-                        </button>
-                    @endguest
+                    <p class="mt-6 max-w-2xl text-base leading-8 text-slate-300 sm:text-lg">
+                        Kupoprodajni ugovor nastaje kroz builder s live pregledom, finalizacijom se sadržaj
+                        trajno zaključava, a integritet dokumenta može se provjeriti SHA-256 hashom —
+                        uključujući javnu provjeru bez otkrivanja sadržaja ugovora.
+                    </p>
 
-                    @auth
-                        <a href="{{ route('dashboard') }}" class="inline-flex items-center justify-center rounded-full bg-cyan-300 px-6 py-3 text-sm font-bold text-slate-950 shadow-2xl shadow-cyan-950/30 transition hover:bg-cyan-200">
-                            Otvori dashboard
-                        </a>
+                    <div class="mt-9 flex flex-col gap-3 sm:flex-row">
+                        @guest
+                            <button
+                                type="button"
+                                data-auth-open="login"
+                                class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-cyan-300 px-6 py-3 text-sm font-bold text-slate-950 transition hover:bg-cyan-200"
+                            >
+                                Uđi u sustav
+                                <svg viewBox="0 0 20 20" aria-hidden="true" class="h-4 w-4">
+                                    <path fill="currentColor" d="M12.293 4.293a1 1 0 0 1 1.414 0l5 5a1 1 0 0 1 0 1.414l-5 5a1 1 0 1 1-1.414-1.414L15.586 11H2a1 1 0 1 1 0-2h13.586l-3.293-3.293a1 1 0 0 1 0-1.414Z"/>
+                                </svg>
+                            </button>
 
-                        <a href="#workflow" class="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-6 py-3 text-sm font-bold text-white transition hover:border-white/20 hover:bg-white/10">
-                            Pregled workflowa
-                        </a>
-                    @endauth
-                </div>
-                    
+                            <button
+                                type="button"
+                                data-auth-open="register"
+                                class="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-white/10 bg-white/5 px-6 py-3 text-sm font-bold text-white transition hover:border-white/20 hover:bg-white/10"
+                            >
+                                Kreiraj račun
+                            </button>
+                        @endguest
 
-                    <dl class="mt-12 grid max-w-2xl grid-cols-3 gap-3">
+                        @auth
+                            <a href="{{ route('dashboard') }}" class="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-cyan-300 px-6 py-3 text-sm font-bold text-slate-950 transition hover:bg-cyan-200">
+                                Otvori dashboard
+                            </a>
+
+                            <a href="#mogucnosti" class="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-white/10 bg-white/5 px-6 py-3 text-sm font-bold text-white transition hover:border-white/20 hover:bg-white/10">
+                                Pregled mogućnosti
+                            </a>
+                        @endauth
+                    </div>
+
+                    <dl class="mt-11 grid max-w-2xl grid-cols-3 gap-3">
                         <div class="rounded-3xl border border-white/10 bg-white/[0.04] p-4">
-                            <dt class="text-xs uppercase tracking-[0.22em] text-slate-500">Audit</dt>
-                            <dd class="mt-2 text-2xl font-semibold text-white">100%</dd>
-                        </div>
-                        <div class="rounded-3xl border border-white/10 bg-white/[0.04] p-4">
-                            <dt class="text-xs uppercase tracking-[0.22em] text-slate-500">Hash</dt>
+                            <dt class="text-xs uppercase tracking-[0.22em] text-slate-500">Integritet</dt>
                             <dd class="mt-2 text-2xl font-semibold text-white">SHA-256</dd>
                         </div>
                         <div class="rounded-3xl border border-white/10 bg-white/[0.04] p-4">
-                            <dt class="text-xs uppercase tracking-[0.22em] text-slate-500">DB</dt>
+                            <dt class="text-xs uppercase tracking-[0.22em] text-slate-500">Snapshot</dt>
                             <dd class="mt-2 text-2xl font-semibold text-white">JSONB</dd>
+                        </div>
+                        <div class="rounded-3xl border border-white/10 bg-white/[0.04] p-4">
+                            <dt class="text-xs uppercase tracking-[0.22em] text-slate-500">Zapis</dt>
+                            <dd class="mt-2 text-2xl font-semibold text-white">Audit</dd>
                         </div>
                     </dl>
                 </div>
 
-                <div class="relative" id="demo">
-                    <div class="absolute -inset-4 rounded-[2rem] bg-gradient-to-br from-cyan-300/20 via-indigo-400/10 to-emerald-300/20 blur-2xl"></div>
+                <div class="relative">
+                    <div class="absolute -inset-4 rounded-[2rem] bg-gradient-to-br from-cyan-300/15 via-indigo-400/10 to-emerald-300/15 blur-2xl" aria-hidden="true"></div>
 
                     <div class="relative overflow-hidden rounded-[2rem] border border-white/10 bg-slate-900/80 shadow-2xl shadow-slate-950/60 backdrop-blur">
-                        <div class="border-b border-white/10 px-5 py-4">
-                            <div class="flex items-center justify-between gap-4">
-                                <div>
-                                    <p class="text-sm font-semibold text-white">Ugovor #DS-2026-001</p>
-                                    <p class="mt-1 text-xs text-slate-400">Kupoprodajni ugovor · PDF priprema</p>
-                                </div>
-                                <span class="rounded-full bg-amber-300/10 px-3 py-1 text-xs font-semibold text-amber-200 ring-1 ring-amber-300/20">
-                                    pending_signatures
-                                </span>
+                        <div class="flex items-center justify-between gap-4 border-b border-white/10 px-5 py-4">
+                            <div>
+                                <p class="text-sm font-semibold text-white">Kupoprodajni ugovor</p>
+                                <p class="mt-1 text-xs text-slate-400">Primjer stanja nakon finalizacije</p>
                             </div>
+                            <span class="rounded-full border border-emerald-300/25 bg-emerald-300/10 px-3 py-1 text-xs font-semibold text-emerald-100">
+                                Finaliziran i zaključan
+                            </span>
                         </div>
 
-                        <div class="p-5">
-                            <div class="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
-                                <div class="flex items-start justify-between gap-4">
-                                    <div>
-                                        <p class="text-xs uppercase tracking-[0.24em] text-slate-500">Dokument</p>
-                                        <h2 class="mt-2 text-xl font-semibold text-white">Vehicle Sales Agreement</h2>
-                                    </div>
-                                    <div class="rounded-2xl bg-cyan-300/10 p-3 text-cyan-200 ring-1 ring-cyan-300/20">
-                                        <svg viewBox="0 0 24 24" class="h-6 w-6" aria-hidden="true">
-                                            <path fill="currentColor" d="M6 2.75A2.25 2.25 0 0 0 3.75 5v14A2.25 2.25 0 0 0 6 21.25h12A2.25 2.25 0 0 0 20.25 19V8.31a2.25 2.25 0 0 0-.66-1.59l-3.31-3.31a2.25 2.25 0 0 0-1.59-.66H6Zm8 1.5v3A1.75 1.75 0 0 0 15.75 9h3v10A.75.75 0 0 1 18 19.75H6A.75.75 0 0 1 5.25 19V5A.75.75 0 0 1 6 4.25h8Zm1.5.31L17.94 7.5h-2.19a.25.25 0 0 1-.25-.25V4.56Z"/>
-                                        </svg>
-                                    </div>
-                                </div>
-
-                                <div class="mt-6 space-y-3">
-                                    <div class="flex items-center justify-between rounded-2xl bg-slate-950/60 px-4 py-3">
-                                        <span class="text-sm text-slate-400">Kupac</span>
-                                        <span class="text-sm font-medium text-white">Mateo Ljevar</span>
-                                    </div>
-                                    <div class="flex items-center justify-between rounded-2xl bg-slate-950/60 px-4 py-3">
-                                        <span class="text-sm text-slate-400">Vozilo</span>
-                                        <span class="text-sm font-medium text-white">VW Polo 6R</span>
-                                    </div>
-                                    <div class="flex items-center justify-between rounded-2xl bg-slate-950/60 px-4 py-3">
-                                        <span class="text-sm text-slate-400">Integritet dokumenta</span>
-                                        <span class="text-sm font-medium text-emerald-200">SHA-256 validiran</span>
-                                    </div>
-                                </div>
+                        <div class="space-y-3 p-5">
+                            <div class="flex items-center justify-between rounded-2xl bg-slate-950/60 px-4 py-3">
+                                <span class="text-sm text-slate-400">Sadržaj ugovora</span>
+                                <span class="text-sm font-medium text-white">Trajno zaključan</span>
                             </div>
-
-                            <div class="mt-5 grid gap-4 sm:grid-cols-2">
-                                <div class="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
-                                    <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Potpisnik</p>
-                                    <p class="mt-2 text-sm font-medium text-white">Kupac</p>
-                                    <div class="mt-4 h-2 rounded-full bg-slate-800">
-                                        <div class="h-2 w-2/3 rounded-full bg-cyan-300"></div>
-                                    </div>
-                                    <p class="mt-3 text-xs text-slate-400">Token aktivan · čeka potvrdu</p>
-                                </div>
-
-                                <div class="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
-                                    <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Audit</p>
-                                    <p class="mt-2 text-sm font-medium text-white">5 događaja</p>
-                                    <div class="mt-4 flex -space-x-2">
-                                        <span class="h-8 w-8 rounded-full border border-slate-900 bg-emerald-300"></span>
-                                        <span class="h-8 w-8 rounded-full border border-slate-900 bg-cyan-300"></span>
-                                        <span class="h-8 w-8 rounded-full border border-slate-900 bg-indigo-300"></span>
-                                    </div>
-                                    <p class="mt-3 text-xs text-slate-400">Trace log spreman</p>
-                                </div>
+                            <div class="flex items-center justify-between rounded-2xl bg-slate-950/60 px-4 py-3">
+                                <span class="text-sm text-slate-400">SHA-256 snapshota</span>
+                                <span class="font-mono text-xs text-cyan-200">9f2e…c41a</span>
+                            </div>
+                            <div class="flex items-center justify-between rounded-2xl bg-slate-950/60 px-4 py-3">
+                                <span class="text-sm text-slate-400">Finalni PDF</span>
+                                <span class="text-sm font-medium text-white">Privatna pohrana</span>
+                            </div>
+                            <div class="flex items-center justify-between rounded-2xl bg-slate-950/60 px-4 py-3">
+                                <span class="text-sm text-slate-400">Javna provjera</span>
+                                <span class="text-sm font-medium text-emerald-200">Aktivna (QR + token)</span>
+                            </div>
+                            <div class="flex items-center justify-between rounded-2xl bg-slate-950/60 px-4 py-3">
+                                <span class="text-sm text-slate-400">Audit događaji</span>
+                                <span class="text-sm font-medium text-white">Zabilježeni</span>
                             </div>
                         </div>
                     </div>
@@ -218,92 +196,91 @@
             </div>
         </section>
 
-        <section id="platform" class="px-5 py-16 sm:px-6 lg:px-8">
-            <div class="mx-auto max-w-7xl">
+        <section id="mogucnosti" class="px-5 py-14 sm:px-6 lg:px-8">
+            <div class="mx-auto max-w-6xl">
                 <div class="max-w-3xl">
-                    <p class="text-sm font-semibold uppercase tracking-[0.28em] text-cyan-200">Platforma</p>
+                    <p class="text-sm font-semibold uppercase tracking-[0.28em] text-cyan-200">Mogućnosti</p>
                     <h2 class="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-                        Modularna struktura za stvaran poslovni proces, ne samo demonstraciju.
+                        Što sustav danas stvarno radi.
                     </h2>
                     <p class="mt-5 text-base leading-8 text-slate-300">
-                        Sučelje je zamišljeno oko stvarnih entiteta iz baze: ugovor, predložak, vozilo, kupac, dokument,
-                        certifikat, potpis i audit zapis. Svaki modul ima jasnu odgovornost.
+                        Svaka funkcionalnost u nastavku implementirana je i pokrivena testovima —
+                        bez marketinških obećanja.
                     </p>
                 </div>
 
-                <div class="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                    <article class="group rounded-[1.75rem] border border-white/10 bg-white/[0.04] p-6 transition hover:-translate-y-1 hover:border-cyan-300/30 hover:bg-cyan-300/[0.06]">
-                        <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-300/10 text-cyan-200 ring-1 ring-cyan-300/20">
-                            <svg viewBox="0 0 24 24" class="h-6 w-6" aria-hidden="true">
-                                <path fill="currentColor" d="M5 4.75A2.75 2.75 0 0 1 7.75 2h8.5A2.75 2.75 0 0 1 19 4.75v14.5A2.75 2.75 0 0 1 16.25 22h-8.5A2.75 2.75 0 0 1 5 19.25V4.75ZM7.75 3.5c-.69 0-1.25.56-1.25 1.25v14.5c0 .69.56 1.25 1.25 1.25h8.5c.69 0 1.25-.56 1.25-1.25V4.75c0-.69-.56-1.25-1.25-1.25h-8.5Z"/>
-                            </svg>
-                        </div>
-                        <h3 class="mt-5 text-lg font-semibold text-white">Predlošci ugovora</h3>
+                <div class="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <article class="rounded-3xl border border-white/10 bg-white/[0.04] p-6">
+                        <h3 class="text-lg font-semibold text-white">Builder s live pregledom</h3>
                         <p class="mt-3 text-sm leading-6 text-slate-400">
-                            Verzije, engine, lokalizacija i JSONB schema polja za dinamičko popunjavanje dokumenata.
+                            Izrada kupoprodajnog ugovora kroz strukturiranu formu s trenutnim pregledom dokumenta
+                            i automatskim popunjavanjem iz kataloga vozila i vlastitog profila.
                         </p>
                     </article>
 
-                    <article class="group rounded-[1.75rem] border border-white/10 bg-white/[0.04] p-6 transition hover:-translate-y-1 hover:border-emerald-300/30 hover:bg-emerald-300/[0.06]">
-                        <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-300/10 text-emerald-200 ring-1 ring-emerald-300/20">
-                            <svg viewBox="0 0 24 24" class="h-6 w-6" aria-hidden="true">
-                                <path fill="currentColor" d="M12 12.75A4.75 4.75 0 1 0 12 3.25a4.75 4.75 0 0 0 0 9.5Zm0-8A3.25 3.25 0 1 1 12 11.25a3.25 3.25 0 0 1 0-6.5ZM4.25 20.5c.73-3.42 3.84-6 7.75-6s7.02 2.58 7.75 6H18.2c-.68-2.55-3.1-4.5-6.2-4.5s-5.52 1.95-6.2 4.5H4.25Z"/>
-                           .52 1.95-6.2 4.5H4 </svg>
-                        </div>
-                        <h3 class="mt-5 text-lg font-semibold text-white">Kupci i identitet</h3>
+                    <article class="rounded-3xl border border-white/10 bg-white/[0.04] p-6">
+                        <h3 class="text-lg font-semibold text-white">Finalizacija i zaključavanje</h3>
                         <p class="mt-3 text-sm leading-6 text-slate-400">
-                            Fizičke i pravne osobe, OIB provjere, identity capture i provjera izvora podataka.
+                            Finalizacijom se snapshot ugovora trajno zaključava — sadržaj se nakon toga
+                            više ne može uređivati.
                         </p>
                     </article>
 
-                    <article class="group rounded-[1.75rem] border border-white/10 bg-white/[0.04] p-6 transition hover:-translate-y-1 hover:border-indigo-300/30 hover:bg-indigo-300/[0.06]">
-                        <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-300/10 text-indigo-200 ring-1 ring-indigo-300/20">
-                            <svg viewBox="0 0 24 24" class="h-6 w-6" aria-hidden="true">
-                                <path fill="currentColor" d="M4.5 9.5 6.28 5.2A2.75 2.75 0 0 1 8.82 3.5h6.36a2.75 2.75 0 0 1 2.54 1.7L19.5 9.5A2.5 2.5 0 0 1 21 11.8v5.45a1.25 1.25 0 0 1-1.25 1.25H18.5A1.5 1.5 0 0 1 17 17h-10a1.5 1.5 0 0 1-1.5 1.5H4.25A1.25 1.25 0 0 1 3 17.25V11.8a2.5 2.5 0 0 1 1.5-2.3Zm3.16-3.72L6.1 9.5h11.8l-1.56-3.72A1.25 1.25 0 0 0 15.18 5H8.82c-.5 0-.95.3-1.16.78ZM5.5 11A1 1 0 0 0 4.5 12v5h1.25v-1.5h12.5V17h1.25v-5a1 1 0 0 0-1-1h-13Zm1.75 2.25h2v1.5h-2v-1.5Zm7.5 0h2v1.5h-2v-1.5Z"/>
-                            </svg>
-                        </div>
-                        <h3 class="mt-5 text-lg font-semibold text-white">Vozila i atributi</h3>
+                    <article class="rounded-3xl border border-white/10 bg-white/[0.04] p-6">
+                        <h3 class="text-lg font-semibold text-white">SHA-256 integritet</h3>
                         <p class="mt-3 text-sm leading-6 text-slate-400">
-                            VIN, registracija, tehnički podaci i fleksibilni JSONB atributi za dodatna svojstva.
+                            Zaključani snapshot i generirani PDF dokumenti imaju SHA-256 hash vrijednosti
+                            koje se mogu ponovno provjeriti u svakom trenutku.
                         </p>
                     </article>
 
-                    <article class="group rounded-[1.75rem] border border-white/10 bg-white/[0.04] p-6 transition hover:-translate-y-1 hover:border-amber-300/30 hover:bg-amber-300/[0.06]">
-                        <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-300/10 text-amber-200 ring-1 ring-amber-300/20">
-                            <svg viewBox="0 0 24 24" class="h-6 w-6" aria-hidden="true">
-                                <path fill="currentColor" d="M12 1.75 4.75 4.8v5.05c0 4.62 3.07 8.92 7.25 10.4 4.18-1.48 7.25-5.78 7.25-10.4V4.8L12 1.75Zm0 1.62 5.75 2.42v4.06c0 3.78-2.38 7.3-5.75 8.8-3.37-1.5-5.75-5.02-5.75-8.8V5.79L12 3.37Zm2.7 5.34 1.06 1.06-4.57 4.57-2.45-2.45 1.06-1.06 1.39 1.39 3.51-3.51Z"/>
-                            </svg>
-                        </div>
-                        <h3 class="mt-5 text-lg font-semibold text-white">Digitalni potpis</h3>
+                    <article class="rounded-3xl border border-white/10 bg-white/[0.04] p-6">
+                        <h3 class="text-lg font-semibold text-white">Privatni PDF dokumenti</h3>
                         <p class="mt-3 text-sm leading-6 text-slate-400">
-                            Certifikati, hash prije/poslije potpisa, status potpisa i dokaziv audit trag.
+                            Probni i finalni PDF čuvaju se u privatnoj pohrani i dostupni su isključivo
+                            vlasniku ugovora — nikad kao javni asset.
+                        </p>
+                    </article>
+
+                    <article class="rounded-3xl border border-white/10 bg-white/[0.04] p-6">
+                        <h3 class="text-lg font-semibold text-white">Audit trag</h3>
+                        <p class="mt-3 text-sm leading-6 text-slate-400">
+                            Ključne operacije nad ugovorom ostavljaju kronološki zapis: tko, kada i s kojim
+                            rezultatom — bez osobnih podataka u metapodacima.
+                        </p>
+                    </article>
+
+                    <article class="rounded-3xl border border-white/10 bg-white/[0.04] p-6">
+                        <h3 class="text-lg font-semibold text-white">Javna provjera</h3>
+                        <p class="mt-3 text-sm leading-6 text-slate-400">
+                            Finalizirani ugovor može dobiti javnu provjeru putem tokena i QR koda:
+                            gost vidi status i hash vrijednosti, nikad sadržaj ugovora.
                         </p>
                     </article>
                 </div>
             </div>
         </section>
 
-        <section id="workflow" class="px-5 py-16 sm:px-6 lg:px-8">
-            <div class="mx-auto max-w-7xl rounded-[2rem] border border-white/10 bg-white/[0.04] p-6 sm:p-8 lg:p-10">
+        <section id="proces" class="px-5 py-14 sm:px-6 lg:px-8">
+            <div class="mx-auto max-w-6xl rounded-[2rem] border border-white/10 bg-white/[0.04] p-6 sm:p-8 lg:p-10">
                 <div class="grid gap-10 lg:grid-cols-[0.8fr_1.2fr]">
                     <div>
-                        <p class="text-sm font-semibold uppercase tracking-[0.28em] text-emerald-200">Workflow</p>
+                        <p class="text-sm font-semibold uppercase tracking-[0.28em] text-emerald-200">Proces</p>
                         <h2 class="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-                            Od podataka do potpisanog PDF-a.
+                            Od unosa do provjerljivog dokumenta.
                         </h2>
                         <p class="mt-5 text-base leading-8 text-slate-300">
-                            Proces je složen tako da svaki korak ostavlja tehnički trag: snapshot podataka, hash dokumenta,
-                            status potpisa i audit zapis.
+                            Svaki korak ostavlja tehnički trag: snapshot podataka, hash dokumenta i audit zapis.
                         </p>
                     </div>
 
                     <div class="grid gap-4 sm:grid-cols-2">
                         @php
                             $steps = [
-                                ['01', 'Unos podataka', 'Kupac, vozilo i osnovni podaci ugovora ulaze u strukturirane tablice.'],
-                                ['02', 'Snapshot ugovora', 'JSONB snapshot zaključava podatke koji su korišteni za dokument.'],
-                                ['03', 'Generiranje dokumenta', 'Predložak proizvodi DOCX/PDF zapis i računa se SHA-256 hash.'],
-                                ['04', 'Digitalni potpis', 'Potpis se veže uz certifikat, hash i vrijeme potpisivanja.'],
+                                ['01', 'Unos podataka', 'Prodavatelj, kupac, vozilo i uvjeti plaćanja unose se kroz builder s live pregledom.'],
+                                ['02', 'Snapshot ugovora', 'Spremanjem nastaje JSONB snapshot — jedini izvor istine za sadržaj dokumenta.'],
+                                ['03', 'Finalizacija', 'Snapshot se zaključava i računa se njegov SHA-256; uređivanje je trajno onemogućeno.'],
+                                ['04', 'PDF i javna provjera', 'Finalni PDF nastaje iz zaključane verzije, a javna provjera potvrđuje status i hash.'],
                             ];
                         @endphp
 
@@ -319,103 +296,36 @@
             </div>
         </section>
 
-        <section id="security" class="px-5 py-16 sm:px-6 lg:px-8">
-            <div class="mx-auto grid max-w-7xl gap-6 lg:grid-cols-3">
-                <div class="lg:col-span-1">
-                    <p class="text-sm font-semibold uppercase tracking-[0.28em] text-cyan-200">Sigurnost</p>
-                    <h2 class="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-                        Projektiran za integritet i provjerljivost.
-                    </h2>
-                </div>
-
-                <div class="grid gap-4 lg:col-span-2 sm:grid-cols-2">
-                    <div class="rounded-[1.75rem] border border-white/10 bg-white/[0.04] p-6">
-                        <h3 class="text-lg font-semibold text-white">Private storage</h3>
-                        <p class="mt-3 text-sm leading-6 text-slate-400">
-                            Datoteke se vode kroz centralnu tablicu i nisu zamišljene kao javni asseti.
-                        </p>
-                    </div>
-                    <div class="rounded-[1.75rem] border border-white/10 bg-white/[0.04] p-6">
-                        <h3 class="text-lg font-semibold text-white">SHA-256 integritet</h3>
-                        <p class="mt-3 text-sm leading-6 text-slate-400">
-                            Dokumenti imaju hash vrijednosti prije i nakon završnog potpisivanja.
-                        </p>
-                    </div>
-                    <div class="rounded-[1.75rem] border border-white/10 bg-white/[0.04] p-6">
-                        <h3 class="text-lg font-semibold text-white">Token hash</h3>
-                        <p class="mt-3 text-sm leading-6 text-slate-400">
-                            Pristupni token se ne sprema kao plain vrijednost, nego kao hash.
-                        </p>
-                    </div>
-                    <div class="rounded-[1.75rem] border border-white/10 bg-white/[0.04] p-6">
-                        <h3 class="text-lg font-semibold text-white">Audit događaji</h3>
-                        <p class="mt-3 text-sm leading-6 text-slate-400">
-                            Ključne akcije ostavljaju zapis: tko, kada, nad kojim entitetom i s kojim rezultatom.
-                        </p>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <section id="data-model" class="px-5 py-16 sm:px-6 lg:px-8">
-            <div class="mx-auto max-w-7xl overflow-hidden rounded-[2rem] border border-white/10 bg-slate-900/70 shadow-2xl shadow-slate-950/40">
-                <div class="border-b border-white/10 p-6 sm:p-8">
-                    <p class="text-sm font-semibold uppercase tracking-[0.28em] text-emerald-200">PostgreSQL model</p>
-                    <h2 class="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-                        Relacijski model s JSONB fleksibilnošću.
-                    </h2>
-                    <p class="mt-5 max-w-3xl text-base leading-8 text-slate-300">
-                        Glavni poslovni podaci ostaju u normaliziranim kolonama, dok se varijabilni podaci i snapshotovi drže u JSONB poljima.
-                    </p>
-                </div>
-
-                <div class="grid divide-y divide-white/10 md:grid-cols-3 md:divide-x md:divide-y-0">
-                    <div class="p-6 sm:p-8">
-                        <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Core</p>
-                        <ul class="mt-5 space-y-3 text-sm text-slate-300">
-                            <li>users</li>
-                            <li>roles</li>
-                            <li>customers</li>
-                            <li>vehicles</li>
-                        </ul>
-                    </div>
-                    <div class="p-6 sm:p-8">
-                        <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Documents</p>
-                        <ul class="mt-5 space-y-3 text-sm text-slate-300">
-                            <li>contract_templates</li>
-                            <li>contracts</li>
-                            <li>contract_documents</li>
-                            <li>files</li>
-                        </ul>
-                    </div>
-                    <div class="p-6 sm:p-8">
-                        <p class="text-xs uppercase tracking-[0.22em] text-slate-500">Trust layer</p>
-                        <ul class="mt-5 space-y-3 text-sm text-slate-300">
-                            <li>certificates</li>
-                            <li>signatures</li>
-                            <li>contract_access_tokens</li>
-                            <li>audit_events</li>
-                        </ul>
-                    </div>
-                </div>
+        <section id="buducnost" class="px-5 py-14 sm:px-6 lg:px-8">
+            <div class="mx-auto max-w-6xl rounded-[2rem] border border-amber-300/15 bg-amber-300/[0.04] p-6 sm:p-8">
+                <p class="text-sm font-semibold uppercase tracking-[0.28em] text-amber-200">U pripremi</p>
+                <h2 class="mt-4 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+                    Priprema za buduće digitalno potpisivanje.
+                </h2>
+                <p class="mt-4 max-w-3xl text-base leading-8 text-slate-300">
+                    Podatkovni temelj za buduću lokalnu demonstraciju kriptografskog potpisa postoji,
+                    ali kriptografsko (CMS) digitalno potpisivanje još nije implementirano.
+                    Finalizacija ugovora nije digitalni potpis: ona zaključava sadržaj i daje provjerljiv
+                    SHA-256 integritet, bez tvrdnji o pravnoj valjanosti potpisa.
+                </p>
             </div>
         </section>
     </main>
 
     <footer class="border-t border-white/10 px-5 py-8 sm:px-6 lg:px-8">
-        <div class="mx-auto flex max-w-7xl flex-col gap-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+        <div class="mx-auto flex max-w-6xl flex-col gap-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
             <p>© {{ now()->year }} Digital Sign Master Degree. Lokalni akademski projekt.</p>
-            <p class="text-slate-400">Laravel · PostgreSQL · Tailwind CSS · Audit-first architecture</p>
+            <p class="text-slate-400">Laravel · PostgreSQL · Tailwind CSS · Audit-first arhitektura</p>
         </div>
     </footer>
 
     @guest
-    <div
-        id="authModal"
-        class="fixed inset-0 z-[100] hidden items-center justify-center px-4 py-8"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="authModalTitle"
+        <div
+            id="authModal"
+            class="fixed inset-0 z-[100] hidden items-center justify-center px-4 py-8"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="authModalTitle"
         >
             <div
                 data-auth-close
@@ -427,7 +337,7 @@
                 <button
                     type="button"
                     data-auth-close
-                    class="absolute right-5 top-5 rounded-full border border-white/10 bg-white/5 p-2 text-slate-300 transition hover:bg-white/10 hover:text-white"
+                    class="absolute right-5 top-5 flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10 hover:text-white"
                     aria-label="Zatvori modal"
                 >
                     <svg viewBox="0 0 20 20" class="h-5 w-5" aria-hidden="true">
@@ -446,13 +356,13 @@
                 </div>
 
                 @if (session('success'))
-                    <div class="mb-5 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm text-emerald-100">
+                    <div class="mb-5 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm text-emerald-100" role="status">
                         {{ session('success') }}
                     </div>
                 @endif
 
                 @if ($errors->any())
-                    <div class="mb-5 rounded-2xl border border-red-300/20 bg-red-300/10 px-4 py-3 text-sm text-red-100">
+                    <div class="mb-5 rounded-2xl border border-red-300/20 bg-red-300/10 px-4 py-3 text-sm text-red-100" role="alert">
                         <p class="font-semibold">Provjeri unesene podatke:</p>
                         <ul class="mt-2 list-inside list-disc space-y-1">
                             @foreach ($errors->all() as $error)
@@ -462,25 +372,42 @@
                     </div>
                 @endif
 
-                <div class="mb-6 grid grid-cols-2 rounded-full border border-white/10 bg-slate-950/70 p-1">
+                <div
+                    class="mb-6 grid grid-cols-2 rounded-full border border-white/10 bg-slate-950/70 p-1"
+                    role="tablist"
+                    aria-label="Prijava ili registracija"
+                >
                     <button
                         type="button"
+                        id="authTabLogin"
                         data-auth-tab="login"
-                        class="rounded-full px-4 py-2.5 text-sm font-semibold transition"
+                        role="tab"
+                        aria-selected="false"
+                        aria-controls="authPanelLogin"
+                        class="min-h-[44px] rounded-full px-4 py-2.5 text-sm font-semibold transition"
                     >
                         Prijava
                     </button>
 
                     <button
                         type="button"
+                        id="authTabRegister"
                         data-auth-tab="register"
-                        class="rounded-full px-4 py-2.5 text-sm font-semibold transition"
+                        role="tab"
+                        aria-selected="false"
+                        aria-controls="authPanelRegister"
+                        class="min-h-[44px] rounded-full px-4 py-2.5 text-sm font-semibold transition"
                     >
                         Registracija
                     </button>
                 </div>
 
-                <div data-auth-panel="login">
+                <div
+                    id="authPanelLogin"
+                    data-auth-panel="login"
+                    role="tabpanel"
+                    aria-labelledby="authTabLogin"
+                >
                     <form method="POST" action="{{ route('login.store') }}" class="space-y-5">
                         @csrf
 
@@ -502,18 +429,28 @@
 
                         <div>
                             <label for="login_password" class="block text-sm font-medium text-slate-200">Lozinka</label>
-                            <input
-                                id="login_password"
-                                name="password"
-                                type="password"
-                                required
-                                autocomplete="current-password"
-                                class="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-300/50 focus:ring-2 focus:ring-cyan-300/20"
-                                placeholder="Unesi lozinku"
-                            >
+                            <div class="relative mt-2">
+                                <input
+                                    id="login_password"
+                                    name="password"
+                                    type="password"
+                                    required
+                                    autocomplete="current-password"
+                                    class="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 pr-24 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-300/50 focus:ring-2 focus:ring-cyan-300/20"
+                                    placeholder="Unesi lozinku"
+                                >
+                                <button
+                                    type="button"
+                                    data-password-toggle="login_password"
+                                    aria-pressed="false"
+                                    class="absolute inset-y-1.5 right-1.5 rounded-xl px-3 text-xs font-semibold text-slate-400 transition hover:bg-white/5 hover:text-white"
+                                >
+                                    Prikaži
+                                </button>
+                            </div>
                         </div>
 
-                        <label class="flex items-center gap-3 text-sm text-slate-300">
+                        <label class="flex min-h-[44px] items-center gap-3 text-sm text-slate-300">
                             <input
                                 type="checkbox"
                                 name="remember"
@@ -523,13 +460,19 @@
                             Zapamti me
                         </label>
 
-                        <button type="submit" class="w-full rounded-full bg-cyan-300 px-6 py-3 text-sm font-bold text-slate-950 shadow-lg shadow-cyan-950/30 transition hover:bg-cyan-200">
+                        <button type="submit" class="min-h-[44px] w-full rounded-xl bg-cyan-300 px-6 py-3 text-sm font-bold text-slate-950 transition hover:bg-cyan-200">
                             Prijavi se
                         </button>
                     </form>
                 </div>
 
-                <div data-auth-panel="register" class="hidden">
+                <div
+                    id="authPanelRegister"
+                    data-auth-panel="register"
+                    role="tabpanel"
+                    aria-labelledby="authTabRegister"
+                    class="hidden"
+                >
                     <form method="POST" action="{{ route('register.store') }}" class="space-y-5">
                         @csrf
 
@@ -545,7 +488,7 @@
                                 required
                                 autocomplete="name"
                                 class="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-300/50 focus:ring-2 focus:ring-emerald-300/20"
-                                placeholder="Mateo Ljevar"
+                                placeholder="Ime i prezime"
                             >
                         </div>
 
@@ -565,31 +508,51 @@
 
                         <div>
                             <label for="register_password" class="block text-sm font-medium text-slate-200">Lozinka</label>
-                            <input
-                                id="register_password"
-                                name="password"
-                                type="password"
-                                required
-                                autocomplete="new-password"
-                                class="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-300/50 focus:ring-2 focus:ring-emerald-300/20"
-                                placeholder="Minimalno 8 znakova"
-                            >
+                            <div class="relative mt-2">
+                                <input
+                                    id="register_password"
+                                    name="password"
+                                    type="password"
+                                    required
+                                    autocomplete="new-password"
+                                    class="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 pr-24 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-300/50 focus:ring-2 focus:ring-emerald-300/20"
+                                    placeholder="Minimalno 8 znakova"
+                                >
+                                <button
+                                    type="button"
+                                    data-password-toggle="register_password"
+                                    aria-pressed="false"
+                                    class="absolute inset-y-1.5 right-1.5 rounded-xl px-3 text-xs font-semibold text-slate-400 transition hover:bg-white/5 hover:text-white"
+                                >
+                                    Prikaži
+                                </button>
+                            </div>
                         </div>
 
                         <div>
                             <label for="register_password_confirmation" class="block text-sm font-medium text-slate-200">Potvrda lozinke</label>
-                            <input
-                                id="register_password_confirmation"
-                                name="password_confirmation"
-                                type="password"
-                                required
-                                autocomplete="new-password"
-                                class="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-300/50 focus:ring-2 focus:ring-emerald-300/20"
-                                placeholder="Ponovi lozinku"
-                            >
+                            <div class="relative mt-2">
+                                <input
+                                    id="register_password_confirmation"
+                                    name="password_confirmation"
+                                    type="password"
+                                    required
+                                    autocomplete="new-password"
+                                    class="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 pr-24 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-emerald-300/50 focus:ring-2 focus:ring-emerald-300/20"
+                                    placeholder="Ponovi lozinku"
+                                >
+                                <button
+                                    type="button"
+                                    data-password-toggle="register_password_confirmation"
+                                    aria-pressed="false"
+                                    class="absolute inset-y-1.5 right-1.5 rounded-xl px-3 text-xs font-semibold text-slate-400 transition hover:bg-white/5 hover:text-white"
+                                >
+                                    Prikaži
+                                </button>
+                            </div>
                         </div>
 
-                        <button type="submit" class="w-full rounded-full bg-emerald-300 px-6 py-3 text-sm font-bold text-slate-950 shadow-lg shadow-emerald-950/30 transition hover:bg-emerald-200">
+                        <button type="submit" class="min-h-[44px] w-full rounded-xl bg-emerald-300 px-6 py-3 text-sm font-bold text-slate-950 transition hover:bg-emerald-200">
                             Registriraj se
                         </button>
                     </form>
@@ -597,6 +560,7 @@
             </div>
         </div>
     @endguest
+
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const modal = document.getElementById('authModal');
@@ -606,17 +570,21 @@
             }
 
             const openButtons = document.querySelectorAll('[data-auth-open]');
-            const closeButtons = document.querySelectorAll('[data-auth-close]');
-            const tabButtons = document.querySelectorAll('[data-auth-tab]');
-            const panels = document.querySelectorAll('[data-auth-panel]');
+            const closeButtons = modal.querySelectorAll('[data-auth-close]');
+            const tabButtons = modal.querySelectorAll('[data-auth-tab]');
+            const panels = modal.querySelectorAll('[data-auth-panel]');
 
             const activeTabClasses = ['bg-cyan-300', 'text-slate-950', 'shadow-sm'];
             const inactiveTabClasses = ['text-slate-300', 'hover:bg-white/5', 'hover:text-white'];
+
+            // Element that opened the modal — focus returns to it on close.
+            let modalOpener = null;
 
             const setTab = (tabName) => {
                 tabButtons.forEach((button) => {
                     const isActive = button.dataset.authTab === tabName;
 
+                    button.setAttribute('aria-selected', isActive ? 'true' : 'false');
                     button.classList.remove(...activeTabClasses, ...inactiveTabClasses);
                     button.classList.add(...(isActive ? activeTabClasses : inactiveTabClasses));
                 });
@@ -626,14 +594,7 @@
                 });
             };
 
-            const openModal = (tabName = 'login') => {
-                setTab(tabName);
-
-                modal.classList.remove('hidden');
-                modal.classList.add('flex');
-
-                document.body.classList.add('overflow-hidden');
-
+            const focusFirstInput = (tabName) => {
                 const firstInput = modal.querySelector(`[data-auth-panel="${tabName}"] input:not([type="hidden"])`);
 
                 if (firstInput) {
@@ -641,15 +602,34 @@
                 }
             };
 
+            const openModal = (tabName = 'login', opener = null) => {
+                modalOpener = opener;
+
+                setTab(tabName);
+
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+
+                document.body.classList.add('overflow-hidden');
+
+                focusFirstInput(tabName);
+            };
+
             const closeModal = () => {
                 modal.classList.add('hidden');
                 modal.classList.remove('flex');
 
                 document.body.classList.remove('overflow-hidden');
+
+                if (modalOpener && document.contains(modalOpener)) {
+                    modalOpener.focus();
+                }
+
+                modalOpener = null;
             };
 
             openButtons.forEach((button) => {
-                button.addEventListener('click', () => openModal(button.dataset.authOpen));
+                button.addEventListener('click', () => openModal(button.dataset.authOpen, button));
             });
 
             closeButtons.forEach((button) => {
@@ -658,11 +638,71 @@
 
             tabButtons.forEach((button) => {
                 button.addEventListener('click', () => setTab(button.dataset.authTab));
+
+                // Arrow keys move between the two tabs, per the ARIA tabs pattern.
+                button.addEventListener('keydown', (event) => {
+                    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+                        return;
+                    }
+
+                    event.preventDefault();
+
+                    const other = [...tabButtons].find((candidate) => candidate !== button);
+
+                    if (other) {
+                        setTab(other.dataset.authTab);
+                        other.focus();
+                    }
+                });
+            });
+
+            document.querySelectorAll('[data-password-toggle]').forEach((toggle) => {
+                toggle.addEventListener('click', () => {
+                    const input = document.getElementById(toggle.dataset.passwordToggle);
+
+                    if (! input) {
+                        return;
+                    }
+
+                    const reveal = input.type === 'password';
+
+                    input.type = reveal ? 'text' : 'password';
+                    toggle.setAttribute('aria-pressed', reveal ? 'true' : 'false');
+                    toggle.textContent = reveal ? 'Sakrij' : 'Prikaži';
+                });
             });
 
             document.addEventListener('keydown', (event) => {
-                if (event.key === 'Escape' && ! modal.classList.contains('hidden')) {
+                if (modal.classList.contains('hidden')) {
+                    return;
+                }
+
+                if (event.key === 'Escape') {
                     closeModal();
+
+                    return;
+                }
+
+                // Minimal focus trap: keep Tab cycling inside the open modal.
+                if (event.key === 'Tab') {
+                    const focusable = [...modal.querySelectorAll(
+                        'a[href], button:not([disabled]), input:not([type="hidden"]):not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])'
+                    )].filter((element) => element.offsetParent !== null);
+
+                    if (focusable.length === 0) {
+                        return;
+                    }
+
+                    const first = focusable[0];
+                    const last = focusable[focusable.length - 1];
+
+                    if (event.shiftKey && document.activeElement === first) {
+                        event.preventDefault();
+                        last.focus();
+                    } else if (! event.shiftKey && document.activeElement === last) {
+                        event.preventDefault();
+                        first.focus();
+                    }
                 }
             });
 

@@ -4,91 +4,76 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Javna provjera dokumenta | Digital Sign Master Degree</title>
+    {{-- Intentionally self-contained: no external CDN or network request on a
+         public page. Styling is inline; the only script hashes the user's local
+         file in-browser via the Web Crypto API and never uploads anything. --}}
     <style>
         * { box-sizing: border-box; }
         body {
             margin: 0;
             background: #020617;
             color: #e2e8f0;
-            font-family: Arial, sans-serif;
-            line-height: 1.5;
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            line-height: 1.55;
+            -webkit-text-size-adjust: 100%;
         }
         main { max-width: 760px; margin: 0 auto; padding: 40px 20px; }
-        header { border-bottom: 1px solid #1e293b; padding-bottom: 28px; }
+        header { border-bottom: 1px solid #1e293b; padding-bottom: 26px; }
         h1, h2, p { margin-top: 0; }
         h1 { margin-bottom: 10px; color: #fff; font-size: 30px; }
         h2 { margin-bottom: 8px; color: #fff; font-size: 19px; }
+        a { color: #67e8f9; }
         .eyebrow {
-            margin-bottom: 8px;
-            color: #a5f3fc;
-            font-size: 12px;
-            font-weight: 700;
-            letter-spacing: 3px;
+            margin: 0 0 10px; color: #a5f3fc; font-size: 12px;
+            font-weight: 700; letter-spacing: 3px;
         }
         .muted { color: #94a3b8; font-size: 14px; }
+        .pill {
+            display: inline-flex; align-items: center; gap: 8px;
+            border: 1px solid #14532d; border-radius: 999px;
+            background: #052e16; color: #bbf7d0;
+            padding: 6px 14px; font-size: 13px; font-weight: 700;
+        }
+        .pill::before { content: ""; width: 8px; height: 8px; border-radius: 999px; background: #4ade80; }
         .card {
-            margin-top: 24px;
-            border: 1px solid #1e293b;
-            border-radius: 20px;
-            background: #0f172a;
-            padding: 24px;
+            margin-top: 24px; border: 1px solid #1e293b; border-radius: 20px;
+            background: #0f172a; padding: 24px;
         }
         .status-card { border-color: #14532d; background: #052e16; }
-        .status { color: #bbf7d0; font-weight: 700; }
+        .status { margin: 0 0 12px; color: #bbf7d0; font-weight: 700; letter-spacing: 2px; font-size: 12px; }
         dl { margin: 22px 0 0; }
         dt { margin-top: 14px; color: #64748b; font-size: 13px; }
         dd { margin: 4px 0 0; color: #e2e8f0; }
         .hash {
-            overflow-wrap: anywhere;
-            color: #a5f3fc;
-            font-family: Consolas, monospace;
-            font-size: 12px;
+            overflow-wrap: anywhere; color: #a5f3fc;
+            font-family: Consolas, ui-monospace, monospace; font-size: 12px;
         }
         .file-input {
-            display: block;
-            width: 100%;
-            margin-top: 18px;
-            border: 1px solid #334155;
-            border-radius: 12px;
-            background: #020617;
-            color: #cbd5e1;
-            padding: 12px;
+            display: block; width: 100%; min-height: 44px; margin-top: 18px;
+            border: 1px solid #334155; border-radius: 12px;
+            background: #020617; color: #cbd5e1; padding: 12px; font-size: 16px;
         }
         button {
-            margin-top: 12px;
-            border: 1px solid #22d3ee;
-            border-radius: 10px;
-            background: #164e63;
-            color: #cffafe;
-            cursor: pointer;
-            font-weight: 700;
-            padding: 10px 16px;
+            min-height: 44px; margin-top: 14px;
+            border: 1px solid #22d3ee; border-radius: 12px;
+            background: #164e63; color: #cffafe; cursor: pointer;
+            font-weight: 700; padding: 10px 18px; font-size: 15px;
         }
+        button:hover { background: #155e75; }
         button:disabled { cursor: wait; opacity: .65; }
-        .hash-result {
-            margin-top: 18px;
-            border-top: 1px solid #1e293b;
-            padding-top: 16px;
-        }
+        :focus-visible { outline: 2px solid #67e8f9; outline-offset: 2px; }
+        .hash-result { margin-top: 18px; border-top: 1px solid #1e293b; padding-top: 16px; }
         .result {
-            display: none;
-            margin-top: 14px;
-            border: 1px solid;
-            border-radius: 12px;
-            padding: 12px 14px;
-            font-size: 14px;
+            display: none; margin-top: 14px; border: 1px solid; border-radius: 12px;
+            padding: 12px 14px; font-size: 14px; font-weight: 600;
         }
         .result.success { display: block; border-color: #166534; background: #052e16; color: #bbf7d0; }
         .result.error { display: block; border-color: #991b1b; background: #450a0a; color: #fecaca; }
         .notice {
-            margin-top: 24px;
-            border: 1px solid #78350f;
-            border-radius: 16px;
-            background: #451a03;
-            color: #fde68a;
-            padding: 16px 18px;
-            font-size: 14px;
+            margin-top: 24px; border: 1px solid #78350f; border-radius: 16px;
+            background: #451a03; color: #fde68a; padding: 16px 18px; font-size: 14px;
         }
+        @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
     </style>
 </head>
 <body>
@@ -104,7 +89,7 @@
 
         <section class="card status-card">
             <p class="status">STATUS PROVJERE</p>
-            <h2>Dokument je evidentiran kao finaliziran</h2>
+            <span class="pill">Dokument je evidentiran kao finaliziran</span>
 
             <dl>
                 <dt>Vrijeme finalizacije</dt>

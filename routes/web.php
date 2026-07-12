@@ -6,6 +6,7 @@ use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\PublicContractVerificationController;
 use App\Http\Controllers\UserContractProfileController;
 use App\Http\Controllers\VehicleCatalogController;
+use App\Models\Contract;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'welcome')->name('home');
@@ -36,8 +37,30 @@ Route::middleware('guest')->group(function () {
 });
 
 Route::middleware('auth')->group(function () {
-    Route::view('/dashboard', 'dashboard')
-        ->name('dashboard');
+    Route::get('/dashboard', function () {
+        $user = request()->user();
+        $profile = $user->contractProfile;
+        $autofillFields = [
+            $profile?->first_name,
+            $profile?->last_name,
+            $profile?->oib,
+            $profile?->address_line1,
+            $profile?->postal_code,
+            $profile?->city,
+        ];
+        $contractCounts = Contract::query()
+            ->where('created_by_user_id', $user->id)
+            ->selectRaw('status, count(*) as total')
+            ->groupBy('status')
+            ->pluck('total', 'status');
+
+        return view('dashboard', [
+            'user' => $user,
+            'profileReady' => collect($autofillFields)->every(fn ($value) => filled($value)),
+            'draftCount' => (int) ($contractCounts[Contract::STATUS_DRAFT] ?? 0),
+            'finalizedCount' => (int) ($contractCounts[Contract::STATUS_FINALIZED] ?? 0),
+        ]);
+    })->name('dashboard');
 
     Route::get('/documents', [DocumentController::class, 'index'])
         ->name('documents.index');

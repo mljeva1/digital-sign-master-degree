@@ -27,6 +27,7 @@ class UserContractProfileUxTest extends TestCase
         parent::setUp();
 
         Schema::dropIfExists('audit_events');
+        Schema::dropIfExists('contracts');
         Schema::dropIfExists('user_contract_profiles');
         Schema::dropIfExists('users');
 
@@ -60,6 +61,17 @@ class UserContractProfileUxTest extends TestCase
             $table->index('oib');
         });
 
+        // Minimal contracts table: the redesigned dashboard shows a cheap
+        // per-user draft/finalized count, so the dashboard route now reads
+        // `contracts`. Only the columns that query touches are needed here.
+        Schema::create('contracts', function (Blueprint $table): void {
+            $table->id();
+            $table->string('status')->default('draft');
+            $table->unsignedBigInteger('created_by_user_id')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+        });
+
         Schema::create('audit_events', function (Blueprint $table): void {
             $table->id();
             $table->timestamp('occurred_at');
@@ -79,6 +91,7 @@ class UserContractProfileUxTest extends TestCase
     protected function tearDown(): void
     {
         Schema::dropIfExists('audit_events');
+        Schema::dropIfExists('contracts');
         Schema::dropIfExists('user_contract_profiles');
         Schema::dropIfExists('users');
 

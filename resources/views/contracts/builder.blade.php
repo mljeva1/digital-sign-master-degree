@@ -6,60 +6,84 @@
     <title>Izrada ugovora | Digital Sign Master Degree</title>
 
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+
+    <style>
+        input, select, textarea { font-size: 16px; }
+        :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+            outline: 2px solid #67e8f9; outline-offset: 2px; border-radius: 0.5rem;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { transition-duration: 0.001ms !important; animation-duration: 0.001ms !important; }
+        }
+        /* Mobile / tablet: show one pane at a time via the Obrazac/Pregled toggle.
+           On xl the split view shows both panes and these rules do not apply. */
+        @media (max-width: 1279px) {
+            #previewPane { display: none; }
+            #previewPane.is-shown-mobile { display: block; height: 70vh; }
+            #formPane.is-hidden-mobile { display: none; }
+        }
+        .vehicle-option[aria-selected="true"] { background: rgba(255,255,255,0.10); }
+    </style>
 </head>
 
 <body class="h-full bg-slate-950 text-slate-100 antialiased">
     <div class="flex min-h-screen flex-col">
         <header class="sticky top-0 z-50 border-b border-white/10 bg-slate-950/90 backdrop-blur-xl">
-            <div class="mx-auto flex max-w-[1800px] flex-col gap-4 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                    <p class="text-sm font-semibold uppercase tracking-[0.28em] text-cyan-200">DSMD</p>
-                    <h1 class="mt-1 text-2xl font-semibold text-white">Izrada kupoprodajnog ugovora</h1>
-                    <div class="mt-2 flex flex-wrap items-center gap-2">
-                        @if ($contractId)
-                            <span class="rounded-full border border-emerald-300/30 bg-emerald-300/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-emerald-200">
-                                Nacrt — uređivanje omogućeno
-                            </span>
-                            <p class="text-sm font-medium text-emerald-200">
-                                Nastavljate uređivanje spremljenog drafta.
-                            </p>
-                        @else
-                            <span class="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-cyan-200">
-                                Novi ugovor — još nije spremljen
-                            </span>
-                        @endif
+            <div class="mx-auto flex max-w-[1800px] flex-col gap-3 px-5 py-3">
+                <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div class="flex items-center gap-4">
+                        <a href="{{ route('contracts.index') }}" class="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 text-sm font-medium text-slate-300 transition hover:bg-white/10 hover:text-white">
+                            <svg viewBox="0 0 20 20" class="h-4 w-4" aria-hidden="true"><path fill="currentColor" d="M12.7 4.3a1 1 0 0 1 0 1.4L8.42 10l4.3 4.3a1 1 0 1 1-1.42 1.4l-5-5a1 1 0 0 1 0-1.4l5-5a1 1 0 0 1 1.4 0Z"/></svg>
+                            Ugovori
+                        </a>
+                        <div>
+                            <p class="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200">DSMD</p>
+                            <h1 class="text-lg font-semibold text-white">Izrada kupoprodajnog ugovora</h1>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-3">
+                        <span id="dirtyStateIndicator" class="hidden items-center gap-1.5 rounded-full border border-amber-300/25 bg-amber-300/10 px-3 py-1 text-xs font-semibold text-amber-100" role="status" aria-live="polite">
+                            <span class="h-1.5 w-1.5 rounded-full bg-amber-300"></span>
+                            Nespremljene promjene
+                        </span>
+
+                        <button type="button" id="fakeSaveButton" class="inline-flex min-h-[44px] items-center rounded-xl border border-emerald-300/25 bg-emerald-300/10 px-4 text-sm font-bold text-emerald-100 transition hover:bg-emerald-300/15">
+                            Spremi promjene
+                        </button>
                     </div>
                 </div>
 
-                <div class="flex flex-wrap gap-3">
-                    <a href="{{ route('dashboard') }}" class="rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10">
-                        Dashboard
-                    </a>
+                <div class="flex flex-wrap items-center gap-2">
+                    @if ($contractId)
+                        <x-badge tone="emerald" class="uppercase">Nacrt — uređivanje omogućeno</x-badge>
+                        <p class="text-sm font-medium text-emerald-200">Nastavljate uređivanje spremljenog drafta.</p>
+                    @else
+                        <x-badge tone="cyan" class="uppercase">Novi ugovor — još nije spremljen</x-badge>
+                    @endif
 
-                    <button
-                        type="button"
-                        id="fakeSaveButton"
-                        class="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-5 py-2.5 text-sm font-bold text-emerald-100 transition hover:bg-emerald-300/15"
-                    >
-                        Spremi promjene
-                    </button>
+                    {{-- Mobile / tablet pane switch. Default is the form ("Obrazac"). --}}
+                    <div class="ml-auto inline-flex rounded-xl border border-white/10 bg-slate-900 p-1 xl:hidden" role="group" aria-label="Prikaz: obrazac ili pregled">
+                        <button type="button" id="mobileViewForm" aria-pressed="true" class="min-h-[44px] rounded-lg px-3 text-xs font-semibold text-slate-950 transition data-[active=false]:bg-transparent data-[active=false]:text-slate-300" data-active="true">Obrazac</button>
+                        <button type="button" id="mobileViewPreview" aria-pressed="false" class="min-h-[44px] rounded-lg px-3 text-xs font-semibold text-slate-300 transition" data-active="false">Pregled</button>
+                    </div>
                 </div>
             </div>
         </header>
 
         <main class="grid flex-1 gap-0 xl:grid-cols-[1fr_520px]">
-            {{-- LIJEVA STRANA: PREVIEW --}}
-            <section class="hidden bg-slate-900 xl:block xl:h-[calc(100vh-97px)] xl:overflow-hidden">
+            {{-- LIVE PREVIEW --}}
+            <section id="previewPane" class="builder-pane bg-slate-900 xl:block xl:h-[calc(100vh-125px)] xl:overflow-hidden">
                 <iframe
                     id="contractPreviewFrame"
                     src="{{ route('contracts.vehicle-sales-preview') }}"
-                    class="h-full w-full border-0"
+                    class="h-full min-h-[70vh] w-full border-0 xl:min-h-0"
                     title="Pregled ugovora o kupoprodaji motornog vozila"
                 ></iframe>
             </section>
 
-            {{-- DESNA STRANA: FORMA (redoslijed prati originalni ugovor) --}}
-            <aside class="border-l border-white/10 bg-slate-950 px-5 py-8 xl:h-[calc(100vh-97px)] xl:overflow-auto">
+            {{-- FORM (redoslijed prati originalni ugovor) --}}
+            <aside id="formPane" class="builder-pane border-l border-white/10 bg-slate-950 px-5 py-8 xl:h-[calc(100vh-125px)] xl:overflow-auto">
                 <form id="contractBuilderForm" class="space-y-6">
                     @csrf
 
@@ -68,27 +92,27 @@
                         <p class="text-sm font-semibold uppercase tracking-[0.22em] text-emerald-200">1 · Prodavatelj i kupac</p>
 
                         <div class="mt-4 rounded-2xl border border-white/10 bg-slate-900/60 p-4">
-                            <p class="text-xs font-semibold uppercase tracking-wider text-slate-300">Moja uloga u ugovoru</p>
+                            <p class="text-sm font-semibold text-white">Koju ugovornu stranu predstavljam?</p>
                             <p class="mt-1 text-xs text-slate-400">
-                                Moj profil se može primijeniti samo na jednu ugovornu stranu odjednom — odabir druge strane uklanja neizmijenjeni autofill s prethodne.
+                                Iz mog profila popunjavaju se samo ime, adresa i OIB. Profil se može primijeniti samo na jednu stranu odjednom — odabir druge strane uklanja neizmijenjeni autofill s prethodne.
                             </p>
 
-                            <div class="mt-3 flex flex-wrap gap-3" role="radiogroup" aria-label="Popuni prodavatelja ili kupca iz mog profila">
-                                <label class="flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm text-slate-200 transition has-[:checked]:border-emerald-300/50 has-[:checked]:bg-emerald-300/10 has-[:checked]:text-emerald-100">
+                            <div class="mt-3 grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Popuni prodavatelja ili kupca iz mog profila">
+                                <label class="flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 px-3 py-2.5 text-sm text-slate-200 transition has-[:checked]:border-emerald-300/50 has-[:checked]:bg-emerald-300/10 has-[:checked]:text-emerald-100">
                                     <input type="radio" name="party_profile_choice" id="partyProfileChoiceSeller" value="seller" class="h-4 w-4">
                                     Ja sam prodavatelj
                                 </label>
-                                <label class="flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm text-slate-200 transition has-[:checked]:border-cyan-300/50 has-[:checked]:bg-cyan-300/10 has-[:checked]:text-cyan-100">
+                                <label class="flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 px-3 py-2.5 text-sm text-slate-200 transition has-[:checked]:border-cyan-300/50 has-[:checked]:bg-cyan-300/10 has-[:checked]:text-cyan-100">
                                     <input type="radio" name="party_profile_choice" id="partyProfileChoiceBuyer" value="buyer" class="h-4 w-4">
                                     Ja sam kupac
                                 </label>
-                                <label class="flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm text-slate-200 transition has-[:checked]:border-white/40 has-[:checked]:bg-white/10 has-[:checked]:text-white">
+                                <label class="flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 px-3 py-2.5 text-sm text-slate-200 transition has-[:checked]:border-white/40 has-[:checked]:bg-white/10 has-[:checked]:text-white">
                                     <input type="radio" name="party_profile_choice" id="partyProfileChoiceManual" value="manual" class="h-4 w-4" checked>
                                     Ručni unos
                                 </label>
                             </div>
 
-                            <div id="partyProfileIncompleteNotice" class="mt-3 hidden rounded-xl border border-amber-300/20 bg-amber-300/[0.07] px-4 py-3 text-xs text-amber-100">
+                            <div id="partyProfileIncompleteNotice" class="mt-3 hidden rounded-xl border border-amber-300/20 bg-amber-300/[0.07] px-4 py-3 text-xs text-amber-100" role="status" aria-live="polite">
                                 <p class="font-semibold">Profil nije spreman za automatsko popunjavanje ugovora.</p>
 
                                 <div id="partyProfileMissingBlock" class="mt-2 hidden">
@@ -175,12 +199,19 @@
                                     id="vehicleCatalogSearchInput"
                                     type="text"
                                     autocomplete="off"
+                                    role="combobox"
+                                    aria-expanded="false"
+                                    aria-controls="vehicleCatalogResults"
+                                    aria-autocomplete="list"
+                                    aria-activedescendant=""
                                     class="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-indigo-300/50 focus:ring-2 focus:ring-indigo-300/20"
                                     placeholder="Upiši marku, model, motor... npr. Volkswagen Polo 1.2 TDI"
                                 >
 
                                 <ul
                                     id="vehicleCatalogResults"
+                                    role="listbox"
+                                    aria-label="Rezultati pretrage kataloga vozila"
                                     class="absolute inset-x-0 top-full z-10 mt-2 hidden max-h-72 overflow-auto rounded-2xl border border-white/10 bg-slate-900 shadow-2xl shadow-black/50"
                                 ></ul>
                             </div>
@@ -192,10 +223,12 @@
                                 Godinu proizvodnje, VIN, registraciju, boju i datum prve registracije provjeri i unesi ručno.
                             </p>
 
-                            <p id="vehicleCatalogLoading" class="mt-2 hidden text-xs text-slate-400">Pretraživanje kataloga...</p>
-                            <p id="vehicleCatalogNoResults" class="mt-2 hidden text-xs text-slate-400">Nema rezultata za uneseni pojam.</p>
-                            <p id="vehicleCatalogError" class="mt-2 hidden text-xs text-red-300">Pretraga kataloga trenutno nije dostupna.</p>
-                            <p id="vehicleCatalogSelected" class="mt-2 hidden text-xs font-medium text-emerald-200"></p>
+                            <div aria-live="polite">
+                                <p id="vehicleCatalogLoading" class="mt-2 hidden text-xs text-slate-400">Pretraživanje kataloga...</p>
+                                <p id="vehicleCatalogNoResults" class="mt-2 hidden text-xs text-slate-400">Nema rezultata za uneseni pojam.</p>
+                                <p id="vehicleCatalogSelected" class="mt-2 hidden text-xs font-medium text-emerald-200"></p>
+                            </div>
+                            <p id="vehicleCatalogError" class="mt-2 hidden text-xs text-red-300" role="alert">Pretraga kataloga trenutno nije dostupna.</p>
                         </div>
 
                         <div class="mt-5 grid gap-4 sm:grid-cols-2">
@@ -372,26 +405,16 @@
                         </p>
 
                         <div class="mt-5 flex flex-col gap-3 sm:flex-row">
-                            <button
-                                type="button"
-                                id="fakePdfButton"
-                                class="rounded-full bg-cyan-300 px-5 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-cyan-200"
-                            >
+                            <button type="button" id="fakePdfButton" class="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-cyan-300 px-5 text-sm font-bold text-slate-950 transition hover:bg-cyan-200">
                                 Preuzmi probni PDF
                             </button>
 
                             @if ($contractId && $contractStatus === \App\Models\Contract::STATUS_DRAFT)
-                                <button
-                                    type="button"
-                                    id="openFinalizeModalButton"
-                                    class="rounded-full border border-amber-300/30 bg-amber-300/10 px-5 py-2.5 text-sm font-bold text-amber-100 transition hover:bg-amber-300/15"
-                                >
+                                <button type="button" id="openFinalizeModalButton" class="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-amber-300/30 bg-amber-300/10 px-5 text-sm font-bold text-amber-100 transition hover:bg-amber-300/15">
                                     Finaliziraj i zaključaj
                                 </button>
                             @else
-                                <p class="self-center text-sm text-slate-400">
-                                    Finalizacija je dostupna nakon prvog spremanja ugovora.
-                                </p>
+                                <p class="self-center text-sm text-slate-400">Finalizacija je dostupna nakon prvog spremanja ugovora.</p>
                             @endif
                         </div>
                     </section>
@@ -400,7 +423,7 @@
         </main>
     </div>
 
-    <div id="toast" class="fixed bottom-5 right-5 hidden rounded-2xl border border-cyan-300/20 bg-slate-900 px-5 py-4 text-sm text-cyan-100 shadow-2xl shadow-slate-950/70">
+    <div id="toast" class="fixed bottom-5 right-5 z-[80] hidden rounded-2xl border border-cyan-300/20 bg-slate-900 px-5 py-4 text-sm text-cyan-100 shadow-2xl shadow-slate-950/70">
         Promjene su vidljive u previewu. Spremanje u bazu ide u sljedećem koraku.
     </div>
 
@@ -413,16 +436,16 @@
                     Nakon finalizacije ugovor više neće biti moguće uređivati. Snapshot će biti zaključan, a finalni PDF će se generirati iz zaključane verzije ugovora. Ova akcija nije digitalni potpis.
                 </p>
 
-                <div id="finalizeValidationErrors" class="mt-5 hidden rounded-2xl border border-red-300/20 bg-red-300/[0.07] px-4 py-3 text-sm text-red-100">
+                <div id="finalizeValidationErrors" class="mt-5 hidden rounded-2xl border border-red-300/20 bg-red-300/[0.07] px-4 py-3 text-sm text-red-100" role="alert">
                     <p class="font-semibold">Ugovor nije spreman za finalizaciju.</p>
                     <ul id="finalizeValidationErrorList" class="mt-2 list-disc space-y-1 pl-5"></ul>
                 </div>
 
                 <div class="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-                    <button type="button" id="cancelFinalizeButton" class="rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-white/10">
+                    <button type="button" id="cancelFinalizeButton" class="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-white/10 bg-white/5 px-5 text-sm font-semibold text-slate-200 transition hover:bg-white/10">
                         Odustani
                     </button>
-                    <button type="button" id="confirmFinalizeButton" class="rounded-full border border-amber-300/30 bg-amber-300 px-5 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-amber-200">
+                    <button type="button" id="confirmFinalizeButton" class="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-amber-300/30 bg-amber-300 px-5 text-sm font-bold text-slate-950 transition hover:bg-amber-200">
                         Finaliziraj i zaključaj
                     </button>
                 </div>
@@ -443,6 +466,7 @@
             const finalizeValidationErrors = document.getElementById('finalizeValidationErrors');
             const finalizeValidationErrorList = document.getElementById('finalizeValidationErrorList');
             const toast = document.getElementById('toast');
+            const dirtyStateIndicator = document.getElementById('dirtyStateIndicator');
             const saveUrl = @json(route('contracts.snapshot.store'));
             const finalizeUrl = @json($contractId ? route('contracts.finalize.store', $contractId) : null);
             const vehicleCatalogSearchUrl = @json(route('vehicle-catalog.search'));
@@ -452,6 +476,9 @@
             const profileAutofillPayload = @js($partyProfileAutofill);
             let currentContractId = @json($contractId);
             let hasUnsavedChanges = false;
+            // Set true only immediately before an expected, intentional navigation
+            // (the finalize redirect) so the beforeunload guard does not fire then.
+            let allowIntentionalUnload = false;
 
             const vehicleCatalogSearchInput = document.getElementById('vehicleCatalogSearchInput');
             const vehicleCatalogResults = document.getElementById('vehicleCatalogResults');
@@ -536,6 +563,17 @@
                 }, 2800);
             };
 
+            // Visible dirty-state indicator. Reflects hasUnsavedChanges only; it
+            // never triggers a save (no autosave) and resets after a successful save.
+            const updateDirtyIndicator = () => {
+                if (! dirtyStateIndicator) {
+                    return;
+                }
+
+                dirtyStateIndicator.classList.toggle('hidden', ! hasUnsavedChanges);
+                dirtyStateIndicator.classList.toggle('inline-flex', hasUnsavedChanges);
+            };
+
             const saveSnapshot = async () => {
                 const payload = Object.fromEntries(new FormData(form).entries());
 
@@ -571,6 +609,7 @@
 
                     currentContractId = data.contract_id;
                     hasUnsavedChanges = false;
+                    updateDirtyIndicator();
                     showToast(data.message);
                 } catch (error) {
                     showToast(error.message || 'Snapshot nije spremljen.');
@@ -582,6 +621,7 @@
 
             const markAsChangedAndUpdatePreview = () => {
                 hasUnsavedChanges = true;
+                updateDirtyIndicator();
                 updatePreview();
             };
 
@@ -663,11 +703,22 @@
                 return true;
             };
 
+            // Vehicle catalog combobox state (shared by mouse + keyboard selection).
+            let vehicleCatalogEntries = [];
+            let vehicleCatalogActiveIndex = -1;
+
+            const setVehicleCatalogExpanded = (expanded) => {
+                vehicleCatalogSearchInput?.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+            };
+
             const hideAllVehicleCatalogStates = () => {
                 vehicleCatalogResults?.classList.add('hidden');
                 vehicleCatalogLoading?.classList.add('hidden');
                 vehicleCatalogNoResults?.classList.add('hidden');
                 vehicleCatalogError?.classList.add('hidden');
+                setVehicleCatalogExpanded(false);
+                vehicleCatalogActiveIndex = -1;
+                vehicleCatalogSearchInput?.setAttribute('aria-activedescendant', '');
             };
 
             const applyCatalogEntry = (entry) => {
@@ -703,27 +754,58 @@
                 }
             };
 
+            // Mouse click and keyboard Enter both route through this same selection.
+            const selectVehicleCatalogOption = (index) => {
+                const entry = vehicleCatalogEntries[index];
+
+                if (entry) {
+                    applyCatalogEntry(entry);
+                }
+            };
+
+            const highlightVehicleCatalogOption = (index) => {
+                const options = vehicleCatalogResults?.querySelectorAll('[role="option"]') ?? [];
+
+                options.forEach((option, optionIndex) => {
+                    const isActive = optionIndex === index;
+                    option.setAttribute('aria-selected', isActive ? 'true' : 'false');
+
+                    if (isActive) {
+                        vehicleCatalogSearchInput?.setAttribute('aria-activedescendant', option.id);
+                        option.scrollIntoView({ block: 'nearest' });
+                    }
+                });
+
+                if (index < 0) {
+                    vehicleCatalogSearchInput?.setAttribute('aria-activedescendant', '');
+                }
+            };
+
             const renderVehicleCatalogResults = (results) => {
                 if (! vehicleCatalogResults) {
                     return;
                 }
 
+                vehicleCatalogEntries = results;
+                vehicleCatalogActiveIndex = -1;
                 vehicleCatalogResults.replaceChildren();
 
                 if (results.length === 0) {
                     vehicleCatalogResults.classList.add('hidden');
                     vehicleCatalogNoResults?.classList.remove('hidden');
+                    setVehicleCatalogExpanded(false);
 
                     return;
                 }
 
                 vehicleCatalogNoResults?.classList.add('hidden');
 
-                results.forEach((entry) => {
+                results.forEach((entry, index) => {
                     const li = document.createElement('li');
-                    const button = document.createElement('button');
-                    button.type = 'button';
-                    button.className = 'block w-full px-4 py-3 text-left text-sm text-white transition hover:bg-white/10 focus:bg-white/10 focus:outline-none';
+                    li.className = 'vehicle-option block cursor-pointer px-4 py-3 text-left text-sm text-white transition hover:bg-white/10';
+                    li.id = `vehicleCatalogOption-${index}`;
+                    li.setAttribute('role', 'option');
+                    li.setAttribute('aria-selected', 'false');
 
                     const labelSpan = document.createElement('span');
                     labelSpan.className = 'block font-semibold';
@@ -747,14 +829,23 @@
                     detailSpan.className = 'mt-0.5 block text-xs text-slate-400';
                     detailSpan.textContent = detailParts.filter(Boolean).join(' · ');
 
-                    button.append(labelSpan, detailSpan);
-                    button.addEventListener('click', () => applyCatalogEntry(entry));
+                    li.append(labelSpan, detailSpan);
+                    li.addEventListener('mousedown', (event) => {
+                        // mousedown (not click) so the input's blur does not close the
+                        // list before selection; same code path as keyboard Enter.
+                        event.preventDefault();
+                        selectVehicleCatalogOption(index);
+                    });
+                    li.addEventListener('mousemove', () => {
+                        vehicleCatalogActiveIndex = index;
+                        highlightVehicleCatalogOption(index);
+                    });
 
-                    li.appendChild(button);
                     vehicleCatalogResults.appendChild(li);
                 });
 
                 vehicleCatalogResults.classList.remove('hidden');
+                setVehicleCatalogExpanded(true);
             };
 
             let vehicleCatalogDebounceTimer = null;
@@ -870,6 +961,9 @@
                         throw new Error(data.message || 'Ugovor nije spreman za finalizaciju.');
                     }
 
+                    // Expected navigation after a successful action: suppress the
+                    // unsaved-changes guard for this redirect only.
+                    allowIntentionalUnload = true;
                     window.location.assign(data.redirect_url);
                 } catch (error) {
                     showToast(error.message || 'Ugovor nije spreman za finalizaciju.');
@@ -910,8 +1004,39 @@
             vehicleCatalogSearchInput?.addEventListener('keydown', (event) => {
                 event.stopPropagation();
 
-                if (event.key === 'Enter') {
+                const listVisible = vehicleCatalogResults
+                    && ! vehicleCatalogResults.classList.contains('hidden')
+                    && vehicleCatalogEntries.length > 0;
+
+                if (event.key === 'ArrowDown') {
                     event.preventDefault();
+
+                    if (! listVisible) {
+                        return;
+                    }
+
+                    vehicleCatalogActiveIndex = Math.min(vehicleCatalogActiveIndex + 1, vehicleCatalogEntries.length - 1);
+                    highlightVehicleCatalogOption(vehicleCatalogActiveIndex);
+                } else if (event.key === 'ArrowUp') {
+                    event.preventDefault();
+
+                    if (! listVisible) {
+                        return;
+                    }
+
+                    vehicleCatalogActiveIndex = Math.max(vehicleCatalogActiveIndex - 1, 0);
+                    highlightVehicleCatalogOption(vehicleCatalogActiveIndex);
+                } else if (event.key === 'Enter') {
+                    event.preventDefault();
+
+                    if (listVisible && vehicleCatalogActiveIndex >= 0) {
+                        selectVehicleCatalogOption(vehicleCatalogActiveIndex);
+                    }
+                } else if (event.key === 'Escape') {
+                    if (listVisible) {
+                        event.preventDefault();
+                        hideAllVehicleCatalogStates();
+                    }
                 }
             });
 
@@ -922,7 +1047,7 @@
                     && ! vehicleCatalogSearchInput.contains(event.target)
                     && ! vehicleCatalogResults.contains(event.target)
                 ) {
-                    vehicleCatalogResults.classList.add('hidden');
+                    hideAllVehicleCatalogStates();
                 }
             });
 
@@ -1100,6 +1225,48 @@
                 });
             });
 
+            // Mobile / tablet pane switch (form <-> preview) with no reload.
+            const mobileViewForm = document.getElementById('mobileViewForm');
+            const mobileViewPreview = document.getElementById('mobileViewPreview');
+            const formPane = document.getElementById('formPane');
+            const previewPane = document.getElementById('previewPane');
+
+            const setMobileView = (view) => {
+                const showPreview = view === 'preview';
+
+                previewPane?.classList.toggle('is-shown-mobile', showPreview);
+                formPane?.classList.toggle('is-hidden-mobile', showPreview);
+
+                mobileViewPreview?.setAttribute('aria-pressed', showPreview ? 'true' : 'false');
+                mobileViewForm?.setAttribute('aria-pressed', showPreview ? 'false' : 'true');
+                mobileViewPreview?.setAttribute('data-active', showPreview ? 'true' : 'false');
+                mobileViewForm?.setAttribute('data-active', showPreview ? 'false' : 'true');
+
+                // Active tab gets the filled look; inactive stays ghost.
+                mobileViewPreview?.classList.toggle('bg-cyan-300', showPreview);
+                mobileViewPreview?.classList.toggle('text-slate-950', showPreview);
+                mobileViewForm?.classList.toggle('bg-cyan-300', ! showPreview);
+                mobileViewForm?.classList.toggle('text-slate-950', ! showPreview);
+
+                if (showPreview) {
+                    updatePreview();
+                }
+            };
+
+            mobileViewForm?.addEventListener('click', () => setMobileView('form'));
+            mobileViewPreview?.addEventListener('click', () => setMobileView('preview'));
+            // Default active look for the form tab.
+            mobileViewForm?.classList.add('bg-cyan-300', 'text-slate-950');
+
+            // Guard against losing real unsaved edits; never fires after a save or
+            // during the intentional finalize redirect, and there is no autosave.
+            window.addEventListener('beforeunload', (event) => {
+                if (hasUnsavedChanges && ! allowIntentionalUnload) {
+                    event.preventDefault();
+                    event.returnValue = '';
+                }
+            });
+
             hydrateForm(initialSnapshot);
             updatePreview();
             iframe.addEventListener('load', updatePreview);
@@ -1117,6 +1284,12 @@
             confirmFinalizeButton?.addEventListener('click', finalizeContract);
             finalizeModal?.addEventListener('click', (event) => {
                 if (event.target === finalizeModal) {
+                    closeFinalizeModal();
+                }
+            });
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && finalizeModal && ! finalizeModal.classList.contains('hidden')) {
                     closeFinalizeModal();
                 }
             });
