@@ -53,6 +53,11 @@ final class Signature extends Model
         return $this->belongsTo(StoredFile::class, 'signature_file_id');
     }
 
+    public function sourceFile(): BelongsTo
+    {
+        return $this->belongsTo(StoredFile::class, 'source_file_id');
+    }
+
     public function signedUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'signed_user_id');
