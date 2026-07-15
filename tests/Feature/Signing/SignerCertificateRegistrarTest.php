@@ -222,6 +222,20 @@ final class SignerCertificateRegistrarTest extends SigningTestCase
         $this->assertRegistrationFails(RegistrationException::CERTIFICATE_UNTRUSTED, fn () => $this->registrar()->register(User::factory()->create(), $this->writeCertificateInput($wrongEku['pem'])));
     }
 
+    public function test_untrusted_and_key_mismatched_certificate_is_rejected_as_key_mismatch(): void
+    {
+        // A certificate that is simultaneously issued by a NON-trusted CA and
+        // configured with a NON-matching private key. Registration precedence
+        // asserts the private-key match BEFORE the trust check, so the stable
+        // outcome is CERTIFICATE_KEY_MISMATCH (never CERTIFICATE_UNTRUSTED).
+        $trustedCa = $this->newRootCa('Trusted Root');
+        $otherCa = $this->newRootCa('Other Root');
+        $signer = $this->issueCertificate($otherCa);
+        $this->configureSigning($this->newKey(), 'p', $trustedCa['pem']);
+
+        $this->assertRegistrationFails(RegistrationException::CERTIFICATE_KEY_MISMATCH, fn () => $this->registrar()->register(User::factory()->create(), $this->writeCertificateInput($signer['pem'])));
+    }
+
     public function test_certificate_without_basic_constraints_is_rejected_precisely(): void
     {
         $ca = $this->newRootCa();

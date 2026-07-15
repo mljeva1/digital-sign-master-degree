@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Services\Signing;
 
 use App\Exceptions\Signing\CertificateRegistrationException as RegistrationException;
+use App\Exceptions\Signing\SignerCertificateProfileException;
+use App\Exceptions\Signing\StoredCertificateIntegrityException;
 use App\Models\Certificate;
 use App\Models\StoredFile;
 use App\Models\User;
@@ -47,7 +49,18 @@ class SignerCertificateRegistrar
 
     private const CLEANUP_INCOMPLETE = 'incomplete';
 
-    public function __construct(private readonly SigningConfig $config) {}
+    private readonly SignerCertificateProfileValidator $profileValidator;
+
+    private readonly StoredCertificateIntegrityVerifier $integrityVerifier;
+
+    public function __construct(
+        private readonly SigningConfig $config,
+        ?SignerCertificateProfileValidator $profileValidator = null,
+        ?StoredCertificateIntegrityVerifier $integrityVerifier = null,
+    ) {
+        $this->profileValidator = $profileValidator ?? new SignerCertificateProfileValidator;
+        $this->integrityVerifier = $integrityVerifier ?? new StoredCertificateIntegrityVerifier;
+    }
 
     public function register(User $owner, string $certificateInputPath): Certificate
     {
@@ -84,39 +97,23 @@ class SignerCertificateRegistrar
             $this->fail(RegistrationException::ROOT_CA_LOAD_FAILED);
         }
 
-        // 5. Parse and compute the canonical (lowercase) SHA-256 fingerprint.
-        $parsed = @openssl_x509_parse($certificate);
-        $fingerprintRaw = @openssl_x509_fingerprint($certificate, 'sha256');
-        if (! is_array($parsed) || ! is_string($fingerprintRaw) || preg_match('/^[0-9a-f]{64}$/i', $fingerprintRaw) !== 1) {
-            $this->fail(RegistrationException::CERTIFICATE_LOAD_FAILED);
-        }
-        $fingerprint = strtolower($fingerprintRaw);
-
-        $this->assertExplicitEndEntity($parsed);
-
-        if (! $this->hasDigitalSignatureUsage($parsed)) {
-            $this->fail(RegistrationException::CERTIFICATE_KEY_USAGE_INVALID);
-        }
-
-        [$validFrom, $validTo] = $this->validityWindow($parsed);
-        $now = Carbon::now();
-        if ($now->lessThan($validFrom)) {
-            $this->fail(RegistrationException::CERTIFICATE_NOT_YET_VALID);
-        }
-        if ($now->greaterThanOrEqualTo($validTo)) {
-            $this->fail(RegistrationException::CERTIFICATE_EXPIRED);
+        // 4. Shared signer-profile rules in the registration precedence:
+        //    profile (parse, CA:FALSE, digitalSignature, validity window) → key
+        //    match → S/MIME trust (no NOVERIFY). The key match precedes the
+        //    trust check so a certificate that is BOTH key-mismatched AND
+        //    untrusted fails as CERTIFICATE_KEY_MISMATCH. The rules live in one
+        //    place; here the neutral defect is mapped to a stable registration
+        //    failure code.
+        try {
+            $profile = $this->profileValidator->validateForRegistration($certificate, $privateKey, $rootCaPath);
+        } catch (SignerCertificateProfileException $e) {
+            $this->fail($this->registrationCodeForDefect($e->defect));
         }
 
-        if (@openssl_x509_check_private_key($certificate, $privateKey) !== true) {
-            $this->fail(RegistrationException::CERTIFICATE_KEY_MISMATCH);
-        }
-
-        // 7. Trust + S/MIME-signing purpose against the local Root CA (no
-        //    NOVERIFY). Accepted only on strict true; an incompatible EKU that
-        //    cannot satisfy SMIME_SIGN is rejected as untrusted.
-        if (@openssl_x509_checkpurpose($certificate, X509_PURPOSE_SMIME_SIGN, [$rootCaPath]) !== true) {
-            $this->fail(RegistrationException::CERTIFICATE_UNTRUSTED);
-        }
+        $fingerprint = $profile['fingerprint'];
+        $parsed = $profile['parsed'];
+        $validFrom = $profile['validFrom'];
+        $validTo = $profile['validTo'];
 
         $this->clearOpenSslErrors();
 
@@ -326,42 +323,28 @@ class SignerCertificateRegistrar
 
     private function assertStoredCertificateIntegrity(Certificate $existing, ValidatedCertificateStorage $storage): void
     {
-        $file = $existing->file;
-
-        if ($file === null
-            || $file->purpose !== StoredFile::PURPOSE_CERTIFICATE
-            || (string) $file->storage_disk !== $storage->disk) {
+        // Delegate to the shared physical-integrity verifier so registration and
+        // CMS signing enforce the identical rule; map its neutral failure to the
+        // registration-scoped persistence code.
+        try {
+            $this->integrityVerifier->verifiedPhysicalPem($existing, $storage);
+        } catch (StoredCertificateIntegrityException) {
             throw RegistrationException::of(RegistrationException::CERTIFICATE_PERSISTENCE_FAILED);
         }
+    }
 
-        $path = (string) $file->storage_path;
-        if (! $storage->filesystem->exists($path)) {
-            throw RegistrationException::of(RegistrationException::CERTIFICATE_PERSISTENCE_FAILED);
-        }
-
-        $bytes = $storage->filesystem->get($path); // read exactly once
-        if (! is_string($bytes)) {
-            throw RegistrationException::of(RegistrationException::CERTIFICATE_PERSISTENCE_FAILED);
-        }
-
-        if (strlen($bytes) !== (int) $file->size_bytes
-            || ! hash_equals(strtolower((string) $file->sha256), hash('sha256', $bytes))) {
-            throw RegistrationException::of(RegistrationException::CERTIFICATE_PERSISTENCE_FAILED);
-        }
-
-        $physical = @openssl_x509_read($bytes);
-        if ($physical === false) {
-            $this->clearOpenSslErrors();
-            throw RegistrationException::of(RegistrationException::CERTIFICATE_PERSISTENCE_FAILED);
-        }
-
-        $physicalFingerprint = @openssl_x509_fingerprint($physical, 'sha256');
-        $this->clearOpenSslErrors();
-
-        if (! is_string($physicalFingerprint)
-            || strtolower($physicalFingerprint) !== strtolower((string) $existing->thumbprint_sha256)) {
-            throw RegistrationException::of(RegistrationException::CERTIFICATE_PERSISTENCE_FAILED);
-        }
+    private function registrationCodeForDefect(SignerCertificateDefect $defect): string
+    {
+        return match ($defect) {
+            SignerCertificateDefect::ParseFailed => RegistrationException::CERTIFICATE_LOAD_FAILED,
+            SignerCertificateDefect::BasicConstraintsInvalid => RegistrationException::CERTIFICATE_BASIC_CONSTRAINTS_INVALID,
+            SignerCertificateDefect::IsCa => RegistrationException::CERTIFICATE_IS_CA,
+            SignerCertificateDefect::KeyUsageInvalid => RegistrationException::CERTIFICATE_KEY_USAGE_INVALID,
+            SignerCertificateDefect::NotYetValid => RegistrationException::CERTIFICATE_NOT_YET_VALID,
+            SignerCertificateDefect::Expired => RegistrationException::CERTIFICATE_EXPIRED,
+            SignerCertificateDefect::KeyMismatch => RegistrationException::CERTIFICATE_KEY_MISMATCH,
+            SignerCertificateDefect::Untrusted => RegistrationException::CERTIFICATE_UNTRUSTED,
+        };
     }
 
     private function deactivateOtherActiveCertificates(int $ownerId, ?int $exceptId): void
@@ -509,46 +492,6 @@ class SignerCertificateRegistrar
         $normalizedDriverMessage = preg_replace('/\s+/', ' ', trim($rawDriverMessage));
 
         return $normalizedDriverMessage === 'UNIQUE constraint failed: certificates.thumbprint_sha256';
-    }
-
-    /**
-     * @param  array<string, mixed>  $parsed
-     * @return array{0: Carbon, 1: Carbon}
-     */
-    private function validityWindow(array $parsed): array
-    {
-        $from = $parsed['validFrom_time_t'] ?? null;
-        $to = $parsed['validTo_time_t'] ?? null;
-
-        if (! is_int($from) || ! is_int($to)) {
-            $this->fail(RegistrationException::CERTIFICATE_LOAD_FAILED);
-        }
-
-        return [Carbon::createFromTimestampUTC($from), Carbon::createFromTimestampUTC($to)];
-    }
-
-    /**
-     * @param  array<string, mixed>  $parsed
-     */
-    private function assertExplicitEndEntity(array $parsed): void
-    {
-        $constraints = $parsed['extensions']['basicConstraints'] ?? null;
-        if (! is_string($constraints)
-            || preg_match('/^\s*CA\s*:\s*(TRUE|FALSE)\s*$/i', $constraints, $matches) !== 1) {
-            $this->fail(RegistrationException::CERTIFICATE_BASIC_CONSTRAINTS_INVALID);
-        }
-
-        if (strtoupper($matches[1]) === 'TRUE') {
-            $this->fail(RegistrationException::CERTIFICATE_IS_CA);
-        }
-    }
-
-    /**
-     * @param  array<string, mixed>  $parsed
-     */
-    private function hasDigitalSignatureUsage(array $parsed): bool
-    {
-        return stripos((string) ($parsed['extensions']['keyUsage'] ?? ''), 'Digital Signature') !== false;
     }
 
     /**
