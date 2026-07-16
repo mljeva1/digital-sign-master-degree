@@ -1881,18 +1881,25 @@ class ContractSnapshotTest extends TestCase
 
         $contract->refresh();
         $storedFile = StoredFile::query()->findOrFail($contract->final_pdf_file_id);
-        $expectedPath = "contracts/{$contract->id}/final-contract.pdf";
 
-        Storage::disk('local')->assertExists($expectedPath);
+        // Final PDFs are create-only: each generation lands on a NEW unpredictable
+        // private path (never a stable, overwritable one), so a DB rollback can
+        // never destroy previously signed bytes.
+        $this->assertMatchesRegularExpression(
+            "#^contracts/{$contract->id}/final-pdfs/final-[0-9a-f-]{36}\.pdf$#",
+            $storedFile->storage_path
+        );
 
-        $content = Storage::disk('local')->get($expectedPath);
+        Storage::disk('local')->assertExists($storedFile->storage_path);
+
+        $content = Storage::disk('local')->get($storedFile->storage_path);
 
         $this->assertStringStartsWith('%PDF', $content);
         $this->assertSame(hash('sha256', $content), $contract->final_pdf_sha256);
         $this->assertSame($contract->final_pdf_sha256, $storedFile->sha256);
+        $this->assertSame(strlen($content), (int) $storedFile->size_bytes);
         $this->assertSame(StoredFile::PURPOSE_FINAL_PDF, $storedFile->purpose);
         $this->assertSame(StoredFile::DISK_LOCAL, $storedFile->storage_disk);
-        $this->assertSame($expectedPath, $storedFile->storage_path);
         $this->assertSame('application/pdf', $storedFile->mime_type);
         $this->assertSame($draftFile->id, $contract->draft_pdf_file_id);
         $this->assertNotSame($draftFile->id, $contract->final_pdf_file_id);
@@ -2191,7 +2198,7 @@ class ContractSnapshotTest extends TestCase
         $user = User::factory()->create();
         $contract = $this->createFinalizedContractFor($user);
         $snapshot = $contract->filled_data_snapshot;
-        $this->attachFinalPdf($contract, $user, '%PDF-1.4 without qr');
+        $old = $this->attachFinalPdf($contract, $user, '%PDF-1.4 without qr');
         $oldHash = $contract->fresh()->final_pdf_sha256;
 
         $this->actingAs($user)
@@ -2204,14 +2211,18 @@ class ContractSnapshotTest extends TestCase
             ->firstOrFail();
         $metadataJson = json_encode($event->metadata, JSON_THROW_ON_ERROR);
 
+        // Create-only: enabling produced a NEW artefact + NEW StoredFile and moved
+        // the binding; the previous artefact is left untouched (never overwritten).
         $this->assertNotSame($oldHash, $contract->final_pdf_sha256);
+        $this->assertNotSame((int) $old->id, (int) $contract->final_pdf_file_id);
+        $new = StoredFile::query()->findOrFail($contract->final_pdf_file_id);
+        $this->assertNotSame($old->storage_path, $new->storage_path);
         $this->assertSame(
-            hash(
-                'sha256',
-                Storage::disk('local')->get("contracts/{$contract->id}/final-contract.pdf")
-            ),
+            hash('sha256', Storage::disk('local')->get($new->storage_path)),
             $contract->final_pdf_sha256
         );
+        Storage::disk('local')->assertExists($old->storage_path);
+        $this->assertSame('%PDF-1.4 without qr', Storage::disk('local')->get($old->storage_path));
         $this->assertTrue($event->metadata['public_verification_token_created']);
         $this->assertTrue($event->metadata['final_pdf_regenerated']);
         $this->assertSame(

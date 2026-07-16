@@ -53,11 +53,21 @@ final class AuditLogger
         'certificate_serial',
     ];
 
+    /**
+     * @param  int|null  $actorUserId  Explicit TRUSTED actor id, already resolved by
+     *                                 the caller from the authentication boundary.
+     *                                 Supply it whenever the caller has its own
+     *                                 resolved actor (e.g. signing), so the audit
+     *                                 actor and the domain actor cannot diverge.
+     *                                 When null the authenticated guard is used, so
+     *                                 existing call-sites keep their behaviour.
+     */
     public function record(
         string $event,
         ?Contract $contract = null,
         array $metadata = [],
-        ?Model $auditable = null
+        ?Model $auditable = null,
+        ?int $actorUserId = null
     ): AuditEvent {
         $entity = $auditable ?? $contract;
 
@@ -67,7 +77,7 @@ final class AuditLogger
 
         return AuditEvent::query()->create([
             'occurred_at' => now(),
-            'actor_user_id' => auth()->id(),
+            'actor_user_id' => $actorUserId ?? auth()->id(),
             'action' => $event,
             'entity_type' => class_basename($entity),
             'entity_id' => $entity->getKey(),

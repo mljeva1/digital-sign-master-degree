@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\Signing\FinalPdfException;
 use App\Models\AuditEvent;
 use App\Models\Contract;
 use App\Models\StoredFile;
@@ -9,6 +10,8 @@ use App\Models\UserContractProfile;
 use App\Services\Audit\AuditLogger;
 use App\Services\Contracts\ContractRequiredFieldsValidator;
 use App\Services\Contracts\FinalPdfGenerator;
+use App\Services\Signing\FinalPdfIntegrityVerifier;
+use App\Services\Signing\FinalPdfVerificationBindingVerifier;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -49,7 +52,9 @@ class ContractController extends Controller
 
     public function __construct(
         private readonly AuditLogger $auditLogger,
-        private readonly FinalPdfGenerator $finalPdfGenerator
+        private readonly FinalPdfGenerator $finalPdfGenerator,
+        private readonly FinalPdfIntegrityVerifier $finalPdfVerifier,
+        private readonly FinalPdfVerificationBindingVerifier $bindingVerifier
     ) {}
 
     public function index(Request $request): View
@@ -252,7 +257,16 @@ class ContractController extends Controller
     {
         abort_unless($contract->created_by_user_id === $request->user()->id, 403);
 
-        $this->finalPdfGenerator->generate($contract, $request->user()->id);
+        try {
+            $this->finalPdfGenerator->generate($contract, $request->user()->id);
+        } catch (FinalPdfException $e) {
+            return redirect()
+                ->route('contracts.index')
+                ->with('error', $e->errorCode() === FinalPdfException::FINAL_PDF_ACTIVELY_SIGNED
+                    // The final PDF is already signed and immutable — never regenerate it.
+                    ? 'Finalni PDF je potpisan i više se ne može ponovno generirati.'
+                    : 'Finalni PDF nije moguće generirati.');
+        }
 
         return redirect()
             ->route('contracts.index')
@@ -267,46 +281,87 @@ class ContractController extends Controller
         abort_unless($contract->isFinalized(), 403);
         abort_unless($contract->isLocked(), 403);
 
-        $tokenCreated = blank($contract->public_verification_token);
-        $finalPdfRegenerated = $contract->hasFinalPdf();
+        try {
+            $fresh = Contract::query()->whereKey($contract->id)->firstOrFail();
 
-        DB::transaction(function () use (
-            $request,
-            $contract,
-            $tokenCreated,
-            $finalPdfRegenerated
-        ): void {
-            if ($tokenCreated) {
-                do {
-                    $token = Str::random(64);
-                } while (Contract::query()
-                    ->where('public_verification_token', $token)
-                    ->exists());
+            if ($this->finalPdfVerifier->hasActiveSignature($fresh)) {
+                // No PDF generation is allowed for signed bytes. This branch owns
+                // its own short top-level transaction and only re-enables a token
+                // already proven to be embedded in the signed PDF.
+                DB::transaction(function () use ($request, $contract): void {
+                    $locked = Contract::query()->whereKey($contract->id)->lockForUpdate()->firstOrFail();
+                    if (! $this->finalPdfVerifier->hasActiveSignature($locked)) {
+                        throw FinalPdfException::of(FinalPdfException::FINAL_PDF_PERSISTENCE_FAILED);
+                    }
 
-                $contract->public_verification_token = $token;
+                    $this->enableVerificationOnSignedContract($locked, $request->user()->id);
+                }, 1);
+            } else {
+                // FinalPdfGenerator is the ONE owner of the real top-level
+                // transaction. Activation, PDF/binding/proof and enable audit are
+                // therefore committed or rolled back as one unit with one
+                // filesystem compensation boundary.
+                $this->finalPdfGenerator->generateForPublicVerification(
+                    $fresh,
+                    $request->user()->id,
+                );
             }
-
-            $contract->public_verification_enabled_at ??= now();
-            $contract->public_verification_revoked_at = null;
-            $contract->save();
-
-            $this->finalPdfGenerator->generate(
-                $contract,
-                $request->user()->id,
-                'public_verification'
-            );
-
-            $this->auditLogger->record('contract.public_verification_enabled', $contract, [
-                'public_verification_token_created' => $tokenCreated,
-                'enabled_at' => $contract->public_verification_enabled_at?->toIso8601String(),
-                'route_name' => 'contracts.public-verification.enable',
-                'final_pdf_regenerated' => $finalPdfRegenerated,
-            ]);
-        });
+        } catch (\Throwable) {
+            // Rolled back: token/enabled state and the existing PDF are unchanged.
+            return redirect()
+                ->route('contracts.index')
+                ->with('error', 'Javnu provjeru nije moguće omogućiti jer finalni PDF nije moguće pripremiti.');
+        }
 
         return redirect()
             ->route('contracts.index')
             ->with('success', 'Javna provjera dokumenta je omogućena.');
+    }
+
+    /**
+     * Enable public verification on a contract whose final PDF is already signed.
+     *
+     * The signed bytes are immutable, so a token that was NOT embedded before
+     * signing can never be honoured — that fails closed and rolls the transaction
+     * back. A token that WAS already embedded (the PDF was generated at/after its
+     * activation) may be re-enabled idempotently: no PDF, StoredFile, binding,
+     * Signature or CMS is touched.
+     */
+    private function enableVerificationOnSignedContract(Contract $locked, int $actorUserId): void
+    {
+        $enabledAt = $locked->public_verification_enabled_at;
+        $token = (string) ($locked->public_verification_token ?? '');
+        $finalPdf = $locked->finalPdfFile;
+
+        // EXACT proof (not a timestamp): the signed PDF must carry a generation
+        // record binding this same token + canonical URL + file id + PDF hash.
+        $alreadyEmbedded = $token !== ''
+            && $enabledAt !== null
+            && $finalPdf !== null
+            && $this->bindingVerifier->hasGenerationProof(
+                $locked,
+                (int) $finalPdf->id,
+                (string) $finalPdf->sha256,
+                $token,
+            );
+
+        if (! $alreadyEmbedded) {
+            throw FinalPdfException::of(FinalPdfException::FINAL_PDF_ACTIVELY_SIGNED);
+        }
+
+        // Idempotent re-enable: only the revocation flag may change.
+        $locked->public_verification_revoked_at = null;
+        $locked->save();
+
+        $this->auditLogger->record('contract.public_verification_enabled', $locked, [
+            'public_verification_token_created' => false,
+            'enabled_at' => $enabledAt->toIso8601String(),
+            'route_name' => 'contracts.public-verification.enable',
+            'final_pdf_regenerated' => false,
+            'final_pdf_file_id' => (int) $finalPdf->id,
+            'final_pdf_sha256' => (string) $finalPdf->sha256,
+            'public_verification_token_sha256' => $this->bindingVerifier->tokenHash($token),
+        ], null, $actorUserId);
     }
 
     public function showFinalPdf(Request $request, Contract $contract): Response
