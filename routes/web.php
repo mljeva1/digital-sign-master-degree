@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ContractController;
+use App\Http\Controllers\ContractSignatureController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\PublicContractVerificationController;
 use App\Http\Controllers\UserContractProfileController;
@@ -11,7 +12,15 @@ use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'welcome')->name('home');
 
+// Unauthenticated, but each view runs a real detached-CMS verification (two
+// openssl_cms_verify calls + a temp workspace), so it is rate-limited to keep an
+// anyone-with-a-token request from amplifying into unbounded crypto work. 20/min
+// per IP is far above real human use (a visitor loads the page once, then hashes
+// their PDF entirely in the browser) while capping automated hammering. The
+// limiter keys on the IP only — the bearer-style token is never used as a key,
+// so it cannot reach the cache store or any log.
 Route::get('/verify/contracts/{token}', [PublicContractVerificationController::class, 'show'])
+    ->middleware('throttle:20,1')
     ->name('public.contracts.verify.show');
 
 Route::get('/login', function () {
@@ -124,6 +133,13 @@ Route::middleware('auth')->group(function () {
 
     Route::post('/contracts/{contract}/public-verification', [ContractController::class, 'enablePublicVerification'])
         ->name('contracts.public-verification.enable');
+
+    Route::post('/contracts/{contract}/sign', [ContractSignatureController::class, 'store'])
+        ->middleware('throttle:6,1')
+        ->name('contracts.sign.store');
+
+    Route::get('/contracts/{contract}/signature/download', [ContractSignatureController::class, 'download'])
+        ->name('contracts.signature.download');
 
     Route::get('/contracts/{contract}/validate-required-fields', [ContractController::class, 'validateRequiredFields'])
         ->name('contracts.required-fields.validate');

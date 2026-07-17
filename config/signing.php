@@ -22,11 +22,30 @@ return [
     |
     */
 
-    'private_key_path' => env('SIGNING_PRIVATE_KEY_PATH'),
+    /*
+    | Local development default: the project-local private signing root
+    | (storage/app/private/signing/local), resolved through storage_path() so it
+    | never depends on the shell working directory or on a developer's home
+    | directory. The whole tree is gitignored and is never web-served by project
+    | code. A real deployment overrides these with out-of-repository paths via
+    | env; SigningConfig only tolerates a project-local path in the local and
+    | testing environments — in production the outside-repository rule stays
+    | absolute.
+    */
 
-    'passphrase_file_path' => env('SIGNING_PASSPHRASE_FILE_PATH'),
+    'private_key_path' => env('SIGNING_PRIVATE_KEY_PATH', storage_path('app/private/signing/local/test-signer-key.pem')),
 
-    'root_ca_path' => env('SIGNING_ROOT_CA_PATH'),
+    'passphrase_file_path' => env('SIGNING_PASSPHRASE_FILE_PATH', storage_path('app/private/signing/local/test-signer-passphrase.txt')),
+
+    'root_ca_path' => env('SIGNING_ROOT_CA_PATH', storage_path('app/private/signing/local/test-root-ca.pem')),
+
+    /*
+    | The ONLY directory a local provisioning run may write signing material to.
+    | Declared here (not hardcoded in the command) so the boundary is one
+    | reviewable value shared by the command and its tests.
+    */
+
+    'local_material_path' => storage_path('app/private/signing/local'),
 
     /*
     | Private storage disk that holds the public signer certificate artefact

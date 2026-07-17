@@ -8,6 +8,8 @@ use App\Models\Certificate;
 use App\Models\Contract;
 use App\Models\StoredFile;
 use App\Models\User;
+use App\Services\Audit\AuditLogger;
+use App\Services\Signing\FinalPdfVerificationBindingVerifier;
 use App\Services\Signing\SignerCertificateRegistrar;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
@@ -213,6 +215,32 @@ abstract class ContractSigningTestCase extends SigningTestCase
             'valid_to' => Carbon::createFromTimestampUTC($parsed['validTo_time_t']),
             'thumbprint_sha256' => $this->fingerprint($material['cert']), 'file_id' => $file->id, 'is_active' => true,
         ]);
+    }
+
+    /**
+     * Activate public verification with a real generation proof, exactly as the
+     * generator's own transaction records it (used by the M12 HTTP suites).
+     */
+    protected function activatePublicVerification(Contract $contract, StoredFile $finalPdf): string
+    {
+        $token = bin2hex(random_bytes(32));
+        $contract->public_verification_token = $token;
+        $contract->public_verification_enabled_at = now();
+        $contract->public_verification_revoked_at = null;
+        $contract->save();
+
+        $binding = app(FinalPdfVerificationBindingVerifier::class);
+        app(AuditLogger::class)->record('contract.final_pdf_generated', $contract, [
+            'contract_id' => (int) $contract->id,
+            'file_id' => (int) $finalPdf->id,
+            'final_pdf_file_id' => (int) $finalPdf->id,
+            'final_pdf_sha256' => (string) $finalPdf->sha256,
+            'generation_reason' => FinalPdfVerificationBindingVerifier::GENERATION_REASON,
+            'public_verification_token_sha256' => $binding->tokenHash($token),
+            'verification_url_sha256' => $binding->urlHash($binding->canonicalVerificationUrl($token)),
+        ], null, (int) $contract->created_by_user_id);
+
+        return $token;
     }
 
     /** Count physical .p7s artefacts under the contracts tree. */

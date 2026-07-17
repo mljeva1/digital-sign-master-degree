@@ -73,6 +73,18 @@
             margin-top: 24px; border: 1px solid #78350f; border-radius: 16px;
             background: #451a03; color: #fde68a; padding: 16px 18px; font-size: 14px;
         }
+        .signal-list { margin: 16px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+        .signal-list li {
+            display: flex; justify-content: space-between; gap: 12px; align-items: baseline;
+            border: 1px solid #1e293b; border-radius: 10px; background: #020617;
+            padding: 9px 12px; font-size: 13px;
+        }
+        .signal-ok { color: #86efac; font-weight: 700; }
+        .signal-fail { color: #fca5a5; font-weight: 700; }
+        .sig-neutral {
+            margin-top: 14px; border: 1px solid #334155; border-radius: 12px;
+            background: #0b1120; color: #cbd5e1; padding: 12px 14px; font-size: 14px;
+        }
         @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
     </style>
 </head>
@@ -101,6 +113,73 @@
                 <dt>SHA-256 zaključanog snapshota</dt>
                 <dd class="hash">{{ $contract->finalized_snapshot_sha256 }}</dd>
             </dl>
+        </section>
+
+        <section class="card" id="signatureStatus">
+            <h2>Digitalni potpis</h2>
+            @if (! $signatureStatus->signaturePresent)
+                <p class="sig-neutral">Dokument još nema dovršen digitalni potpis.</p>
+            @elseif ($signatureStatus->verificationUnavailable)
+                <p class="sig-neutral">
+                    Zabilježen je dovršen digitalni potpis, ali provjeru potpisa trenutno nije
+                    moguće izvršiti. Potpis se ne prikazuje kao valjan dok provjera ne uspije.
+                </p>
+            @else
+                <p class="muted">
+                    Svaki signal provjere prikazuje se odvojeno. Provjera koristi isključivo
+                    pohranjene zapise i lokalni testni trust anchor.
+                </p>
+                <ul class="signal-list">
+                    <li>
+                        <span>Integritet finalnog PDF-a</span>
+                        <span class="{{ $signatureStatus->pdfIntegrityValid ? 'signal-ok' : 'signal-fail' }}">{{ $signatureStatus->pdfIntegrityValid ? 'Valjan' : 'Nije valjan' }}</span>
+                    </li>
+                    <li>
+                        <span>Integritet potpisnog artefakta</span>
+                        <span class="{{ $signatureStatus->cmsIntegrityValid ? 'signal-ok' : 'signal-fail' }}">{{ $signatureStatus->cmsIntegrityValid ? 'Valjan' : 'Nije valjan' }}</span>
+                    </li>
+                    <li>
+                        <span>Kriptografska provjera potpisa</span>
+                        <span class="{{ $signatureStatus->cryptographicValid ? 'signal-ok' : 'signal-fail' }}">{{ $signatureStatus->cryptographicValid ? 'Uspješna' : 'Neuspješna' }}</span>
+                    </li>
+                    <li>
+                        <span>Povjerenje (lokalni testni Root CA)</span>
+                        <span class="{{ $signatureStatus->trustValid ? 'signal-ok' : 'signal-fail' }}">{{ $signatureStatus->trustValid ? 'Potvrđeno' : 'Nije potvrđeno' }}</span>
+                    </li>
+                    <li>
+                        <span>Vremenska valjanost certifikata</span>
+                        <span class="{{ $signatureStatus->certificateTimeValid ? 'signal-ok' : 'signal-fail' }}">{{ $signatureStatus->certificateTimeValid ? 'Valjana' : 'Nije valjana' }}</span>
+                    </li>
+                    <li>
+                        <span>Certifikat aktivan u evidenciji</span>
+                        <span class="{{ $signatureStatus->certificateActive ? 'signal-ok' : 'signal-fail' }}">{{ $signatureStatus->certificateActive ? 'Da' : 'Ne' }}</span>
+                    </li>
+                    <li>
+                        <span>Podudaranje potpisnog certifikata</span>
+                        <span class="{{ $signatureStatus->signerFingerprintMatches ? 'signal-ok' : 'signal-fail' }}">{{ $signatureStatus->signerFingerprintMatches ? 'Da' : 'Ne' }}</span>
+                    </li>
+                    <li>
+                        <span>Podudaranje potpisanog sadržaja</span>
+                        <span class="{{ $signatureStatus->sourceHashMatches ? 'signal-ok' : 'signal-fail' }}">{{ $signatureStatus->sourceHashMatches ? 'Da' : 'Ne' }}</span>
+                    </li>
+                </ul>
+
+                <dl>
+                    <dt>Vrijeme potpisa</dt>
+                    <dd>{{ $signatureStatus->signedAtIso ? \Illuminate\Support\Carbon::parse($signatureStatus->signedAtIso)->format('d.m.Y. H:i:s') : 'N/A' }}</dd>
+
+                    @if ($signatureStatus->certificateFingerprint)
+                        <dt>SHA-256 otisak potpisnog certifikata</dt>
+                        <dd class="hash">{{ $signatureStatus->certificateFingerprint }}</dd>
+                    @endif
+                </dl>
+            @endif
+
+            <p class="muted" style="margin-top: 16px;">
+                Digitalni potpis u ovom sustavu lokalni je akademski X.509 detached CMS/PKCS#7
+                prototip sa self-signed testnim trust anchorom — nije PAdES, eIDAS niti
+                kvalificirani elektronički potpis i nema pravnu snagu.
+            </p>
         </section>
 
         <section class="card" id="localPdfVerification">

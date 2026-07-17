@@ -52,3 +52,8 @@ master-degree-obsidian/node_modules/
 *.cms
 *.der
 /storage/signing/
+
+# Project-local private signing root (dev X.509 material + passphrase).
+# Explicit directory rule: the extension patterns above do NOT cover
+# test-signer-passphrase.txt, so the whole tree is ignored unconditionally.
+/storage/app/private/signing/

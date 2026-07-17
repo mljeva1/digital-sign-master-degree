@@ -10,8 +10,10 @@ use App\Models\UserContractProfile;
 use App\Services\Audit\AuditLogger;
 use App\Services\Contracts\ContractRequiredFieldsValidator;
 use App\Services\Contracts\FinalPdfGenerator;
+use App\Services\Signing\ContractSignatureStatusService;
 use App\Services\Signing\FinalPdfIntegrityVerifier;
 use App\Services\Signing\FinalPdfVerificationBindingVerifier;
+use App\Services\Signing\SignerCertificateStatusService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -57,8 +59,11 @@ class ContractController extends Controller
         private readonly FinalPdfVerificationBindingVerifier $bindingVerifier
     ) {}
 
-    public function index(Request $request): View
-    {
+    public function index(
+        Request $request,
+        ContractSignatureStatusService $signatureStatusService,
+        SignerCertificateStatusService $certificateStatusService
+    ): View {
         $contracts = Contract::query()
             ->with(['draftPdfFile', 'finalPdfFile'])
             ->where('created_by_user_id', $request->user()->id)
@@ -69,8 +74,21 @@ class ContractController extends Controller
             ->orderByDesc('updated_at')
             ->get();
 
+        // Read-only, fail-closed signature status per finalized contract. The
+        // service is the single authority; the Blade layer only displays it.
+        $signatureStatuses = [];
+        foreach ($contracts as $contract) {
+            if ($contract->isFinalized()) {
+                $signatureStatuses[$contract->id] = $signatureStatusService->status($contract);
+            }
+        }
+
         return view('contracts.index', [
             'contracts' => $contracts,
+            'signatureStatuses' => $signatureStatuses,
+            // Preflight hint only: tells the owner up-front whether a usable
+            // signer certificate exists. ContractSigningService still decides.
+            'signerCertificate' => $certificateStatusService->forUser((int) $request->user()->id),
         ]);
     }
 

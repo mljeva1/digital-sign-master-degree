@@ -227,13 +227,65 @@ final class SigningConfig
         return $value;
     }
 
+    /**
+     * Secret material must live outside the repository and every public root.
+     *
+     * Narrow local-development exception: the canonical project-local signing
+     * root (config `signing.local_material_path`, i.e.
+     * storage/app/private/signing/local) is tolerated ONLY in the local and
+     * testing environments, so a developer's key/passphrase can live inside the
+     * gitignored project tree instead of their home directory. The exception is
+     * limited to that one canonical directory, still rejects every public root,
+     * and does NOT apply in production — there the outside-repository rule
+     * remains absolute.
+     */
     private function assertOutsideRepositoryAndPublic(string $path): void
     {
+        if ($this->isWithinLocalSigningRoot($path)) {
+            foreach ($this->publicRoots() as $publicRoot) {
+                if ($this->isWithin($path, $publicRoot)) {
+                    throw RegistrationException::of(RegistrationException::CONFIG_INVALID);
+                }
+            }
+
+            return;
+        }
+
         foreach ($this->forbiddenSecretRoots() as $root) {
             if ($this->isWithin($path, $root)) {
                 throw RegistrationException::of(RegistrationException::CONFIG_INVALID);
             }
         }
+    }
+
+    /**
+     * True only for a canonically-resolved path inside the STRUCTURALLY verified
+     * project-local signing root, and only in local/testing.
+     *
+     * The root is never taken from realpath() of the configured value: a
+     * junction/symlink at `signing/local` pointing at, say, the repository root
+     * would otherwise turn the whole repository into "the local signing root"
+     * and let a key inside the repository bypass the outside-repository rule.
+     * LocalSigningRoot proves the real parent identity instead, and the
+     * configured value must still match the expected location.
+     */
+    private function isWithinLocalSigningRoot(string $path): bool
+    {
+        if (! app()->environment(['local', 'testing'])) {
+            return false;
+        }
+
+        $boundary = new LocalSigningRoot;
+        if (! $boundary->matchesExpectedPath(config('signing.local_material_path'))) {
+            return false;
+        }
+
+        $root = $boundary->verified();
+        if ($root === null) {
+            return false;
+        }
+
+        return $boundary->isWithin($path, $root);
     }
 
     /**
