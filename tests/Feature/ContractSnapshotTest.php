@@ -1928,7 +1928,14 @@ class ContractSnapshotTest extends TestCase
         $this->assertStringContainsString('Prodavatelj jamči da je vozilo njegovo vlasništvo', $html);
         $this->assertStringContainsString('Napomena:', $html);
         $this->assertStringContainsString('OIB:', $html);
-        $this->assertStringContainsString('Dokument nije kriptografski digitalno potpisan.', $html);
+        // Time-durable notice (M13): the final PDF is create-only and a detached
+        // CMS/PKCS#7 signature can be produced AFTER generation, so the template
+        // must not categorically claim the document is not cryptographically
+        // signed. It states only that no signature is EMBEDDED in the PDF, and
+        // points at the separate CMS/PKCS#7 artifact verified via public check.
+        $this->assertStringContainsString('Ovaj PDF ne sadrži ugrađeni elektronički potpis.', $html);
+        $this->assertStringContainsString('CMS/PKCS#7 artefakt', $html);
+        $this->assertStringNotContainsString('Dokument nije kriptografski digitalno potpisan.', $html);
         $this->assertStringContainsString($contract->finalized_snapshot_sha256, $html);
         $this->assertStringContainsString('Stranica {PAGE_NUM} / {PAGE_COUNT}', $html);
     }

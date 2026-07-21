@@ -296,17 +296,24 @@
             </div>
         </section>
 
-        <section id="buducnost" class="px-5 py-14 sm:px-6 lg:px-8">
-            <div class="mx-auto max-w-6xl rounded-[2rem] border border-amber-300/15 bg-amber-300/[0.04] p-6 sm:p-8">
-                <p class="text-sm font-semibold uppercase tracking-[0.28em] text-amber-200">U pripremi</p>
+        <section id="potpisivanje" class="px-5 py-14 sm:px-6 lg:px-8">
+            <div class="mx-auto max-w-6xl rounded-[2rem] border border-white/10 bg-white/[0.04] p-6 sm:p-8">
+                <p class="text-sm font-semibold uppercase tracking-[0.28em] text-cyan-200">Digitalno potpisivanje</p>
                 <h2 class="mt-4 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
-                    Priprema za buduće digitalno potpisivanje.
+                    Lokalni akademski kriptografski potpis dokumenta.
                 </h2>
                 <p class="mt-4 max-w-3xl text-base leading-8 text-slate-300">
-                    Podatkovni temelj za buduću lokalnu demonstraciju kriptografskog potpisa postoji,
-                    ali kriptografsko (CMS) digitalno potpisivanje još nije implementirano.
-                    Finalizacija ugovora nije digitalni potpis: ona zaključava sadržaj i daje provjerljiv
-                    SHA-256 integritet, bez tvrdnji o pravnoj valjanosti potpisa.
+                    Nad zaključanim finalnim PDF-om može se izraditi lokalni akademski detached
+                    CMS/PKCS#7 potpis. Potpis se pohranjuje kao zaseban <code class="text-cyan-200">.p7s</code>
+                    artefakt — sam PDF se ne mijenja — a njegov se status provjerava kroz javnu provjeru,
+                    zasebno za integritet PDF-a, integritet potpisa, kriptografsku valjanost i povjerenje
+                    prema lokalnom testnom Root CA.
+                </p>
+                <p class="mt-4 max-w-3xl text-sm leading-7 text-slate-400">
+                    Radi se o lokalnom testnom PKI-ju sa self-signed testnim trust anchorom.
+                    Nije PAdES, eIDAS ni kvalificirani elektronički potpis (QES) i nema pravnu snagu.
+                    Finalizacija ugovora zasebna je aplikacijska radnja: ona zaključava sadržaj i daje
+                    provjerljiv SHA-256 integritet, ali sama po sebi nije digitalni potpis.
                 </p>
             </div>
         </section>

@@ -126,7 +126,7 @@ class WebUiRedesignTest extends TestCase
 
     // --- Landing / auth (guest) -------------------------------------------
 
-    public function test_landing_states_real_features_and_marks_signing_as_upcoming(): void
+    public function test_landing_states_real_features_and_describes_local_cms_signing(): void
     {
         $response = $this->get('/');
 
@@ -136,9 +136,28 @@ class WebUiRedesignTest extends TestCase
             ->assertSee('SHA-256 integritet')
             ->assertSee('Audit trag')
             ->assertSee('Javna provjera')
-            ->assertSee('U pripremi')
-            // Honest boundary: cryptographic signing is explicitly not implemented.
-            ->assertSee('još nije implementirano');
+            // Signing is implemented (M10–M12): a local academic detached CMS/PKCS#7 artifact.
+            ->assertSee('CMS/PKCS#7')
+            ->assertSee('.p7s')
+            // The stale "not implemented yet" claim must be gone.
+            ->assertDontSee('još nije implementirano')
+            ->assertDontSee('U pripremi');
+    }
+
+    public function test_landing_does_not_overclaim_signature_legal_status(): void
+    {
+        $response = $this->get('/')->assertOk();
+
+        // The honest boundary is stated as a NEGATION (this is NOT these things),
+        // so the page names PAdES/eIDAS/QES only to disclaim them.
+        $response->assertSee('Nije PAdES, eIDAS ni kvalificirani elektronički potpis (QES)');
+        $response->assertSee('nema pravnu snagu');
+        $response->assertSee('lokalnom testnom PKI');
+
+        // It must never make a POSITIVE qualified/legal-validity claim.
+        $response->assertDontSee('pravno valjan');
+        $response->assertDontSee('pravno obvezujuć');
+        $response->assertDontSee('kvalificirani potpis dokumenta');
     }
 
     public function test_landing_auth_modal_uses_accessible_tabs(): void

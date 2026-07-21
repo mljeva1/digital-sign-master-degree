@@ -7,6 +7,8 @@ namespace Tests\Feature;
 use App\Models\Signature;
 use App\Models\StoredFile;
 use App\Models\User;
+use App\Support\Testing\PostgresGuardResult;
+use App\Support\Testing\PostgresTestConnectionGuard;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -18,23 +20,37 @@ use Throwable;
  * These assertions target physical PostgreSQL CHECK / FK / partial-unique
  * behaviour that SQLite cannot represent, so they run ONLY against an
  * explicitly configured, isolated PostgreSQL test database. The isolation gate
- * (see setUp) refuses to run unless ALL of the following hold, and skips
- * safely BEFORE opening any transaction or issuing any write SQL otherwise:
+ * (see setUp) refuses to run unless ALL of the following hold, and it decides
+ * BEFORE opening any transaction or issuing any write SQL:
  *
  *   - DB_PG_TEST_ENABLED is truthy (explicit opt-in);
  *   - DB_PG_TEST_CONNECTION names a connection present in config;
- *   - that name is neither the current default connection nor 'pgsql';
+ *   - that name is neither the development connection nor 'pgsql';
  *   - that connection's driver is pgsql;
- *   - SELECT current_database() on it returns a database that (a) differs from
- *     the default connection's database and (b) carries a _test / _testing /
- *     -test / -testing marker.
+ *   - the DEVELOPMENT side is an explicit, configured pgsql connection too
+ *     (self::DEVELOPMENT_CONNECTION = 'pgsql_development'), never
+ *     config('database.default') — under phpunit.xml the default is SQLite
+ *     :memory:, which could never prove isolation between two real PostgreSQL
+ *     databases;
+ *   - SELECT current_database() resolved over BOTH real connections returns a
+ *     test database that (a) differs from the development database and
+ *     (b) ends with a _test or _testing marker.
  *
- * It therefore never runs against the default sqlite :memory: connection and
- * never against the development database. Each test runs inside a transaction
- * rolled back in tearDown, so no row persists even on the test database.
+ * It therefore never runs against the development database. Each test runs
+ * inside a transaction rolled back in tearDown, so no row persists even on the
+ * test database.
  *
- * SQLSTATE reference: FK = 23503, CHECK = 23514, NOT NULL = 23502,
- * unique violation = 23505.
+ * SQLSTATE reference: FK insert = 23503, ON DELETE RESTRICT = 23001,
+ * CHECK = 23514, NOT NULL = 23502, unique violation = 23505.
+ *
+ * PostgreSQL distinguishes the two foreign-key failure directions: inserting a
+ * child row that references a missing parent raises foreign_key_violation
+ * (23503), whereas deleting a still-referenced parent under an explicit
+ * ON DELETE RESTRICT action raises restrict_violation (23001) — RESTRICT is
+ * checked immediately, unlike NO ACTION which would defer to 23503. The FK here
+ * is declared restrictOnDelete(), so the delete case asserts 23001. (Verified
+ * on the first real run against an isolated PostgreSQL 18.4 test database,
+ * M13 — before this the suite had never actually executed against real PG.)
  *
  * Deviation note (physical schema outranks the audit request): a pending row
  * missing document_hash_before is rejected by the column-level NOT NULL
@@ -55,9 +71,21 @@ final class SignatureSourceBindingSchemaTest extends TestCase
 
     private const HASH = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
+    /**
+     * Explicit PostgreSQL development identity for the isolation check.
+     *
+     * NEVER `config('database.default')`: under phpunit.xml the default is
+     * SQLite :memory:, which cannot prove isolation between two real PostgreSQL
+     * databases. This connection resolves its name from PG_DEVELOPMENT_* with a
+     * literal default and is only ever read (SELECT current_database()).
+     */
+    public const DEVELOPMENT_CONNECTION = 'pgsql_development';
+
     private const SQLSTATE_NOT_NULL = '23502';
 
     private const SQLSTATE_FK = '23503';
+
+    private const SQLSTATE_RESTRICT = '23001';
 
     private const SQLSTATE_CHECK = '23514';
 
@@ -112,50 +140,71 @@ final class SignatureSourceBindingSchemaTest extends TestCase
 
     /**
      * Refuse to run unless pointed at an explicitly opted-in, isolated,
-     * clearly-marked PostgreSQL test database. Skips before any write.
+     * clearly-marked PostgreSQL test database.
+     *
+     * Skip/fail semantics (fail-closed, no false green):
+     *  - opt-in OFF (DB_PG_TEST_ENABLED not truthy) → precise skip;
+     *  - opt-in ON + safe, isolated config          → run;
+     *  - opt-in ON + unsafe/unresolvable config      → FAIL, never skip.
+     *
+     * An operator who set DB_PG_TEST_ENABLED=true but mis-configured the
+     * connection (e.g. a PG_TEST_URL pointing at the development database) must
+     * see a failure, not a green skip. The rule is shared with the
+     * testing:prepare-postgres command via {@see PostgresTestConnectionGuard},
+     * so the two cannot drift.
      */
     private function guardIsolatedPostgresConnection(): void
     {
-        if (! filter_var(env('DB_PG_TEST_ENABLED'), FILTER_VALIDATE_BOOLEAN)) {
-            $this->markTestSkipped('M10 PostgreSQL schema proofs are opt-in: set DB_PG_TEST_ENABLED=true.');
+        $decision = self::postgresGateDecisionUsing(app(PostgresTestConnectionGuard::class));
+
+        if ($decision['action'] === PostgresTestConnectionGuard::ACTION_SKIP) {
+            $this->markTestSkipped((string) $decision['reason']);
         }
 
-        $conn = env('DB_PG_TEST_CONNECTION');
-        if (blank($conn)) {
-            $this->markTestSkipped('Set DB_PG_TEST_CONNECTION to an isolated, migrated PostgreSQL test connection.');
+        if ($decision['action'] === PostgresTestConnectionGuard::ACTION_FAIL) {
+            $this->fail('DB_PG_TEST_ENABLED=true but the isolated PostgreSQL test connection is unsafe or unresolvable: '.$decision['reason']);
         }
 
-        $default = config('database.default');
-        if ($conn === $default || $conn === 'pgsql') {
-            $this->markTestSkipped('DB_PG_TEST_CONNECTION must be a dedicated test connection, never the default connection or "pgsql".');
-        }
+        // Safe: route the suite at the isolated test DB for the duration of the test.
+        config(['database.default' => self::postgresConnectionPair()['test']]);
+    }
 
-        $connections = config('database.connections');
-        if (! is_array($connections) || ! array_key_exists($conn, $connections)) {
-            $this->markTestSkipped("Connection [{$conn}] is not configured; refusing to run.");
-        }
+    /**
+     * The caller's connection pair.
+     *
+     * The development side is an EXPLICIT PostgreSQL connection, never
+     * `config('database.default')`: phpunit.xml forces DB_DATABASE=:memory:, so
+     * the default connection during a test run is SQLite and would never let the
+     * guard compare two real PostgreSQL databases. Exposed so a caller-level
+     * regression test can assert this contract without a real database.
+     *
+     * @return array{development:string, test:string}
+     */
+    public static function postgresConnectionPair(): array
+    {
+        return [
+            'development' => self::DEVELOPMENT_CONNECTION,
+            'test' => (string) env('DB_PG_TEST_CONNECTION'),
+        ];
+    }
 
-        if (($connections[$conn]['driver'] ?? null) !== 'pgsql') {
-            $this->markTestSkipped("Connection [{$conn}] is not a pgsql driver; refusing to run.");
-        }
+    /**
+     * Run the real caller contract through a supplied guard. Kept public+static
+     * so the caller-level regression test exercises exactly this code path
+     * (real connection pair, real gateDecision call) with a scripted resolver,
+     * instead of re-testing guard internals.
+     *
+     * @return array{action:string, reason:?string, result:?PostgresGuardResult}
+     */
+    public static function postgresGateDecisionUsing(PostgresTestConnectionGuard $guard): array
+    {
+        $pair = self::postgresConnectionPair();
 
-        try {
-            $targetDb = (string) DB::connection($conn)->selectOne('select current_database() as db')->db;
-            $defaultDb = (string) DB::connection($default)->getDatabaseName();
-        } catch (Throwable $e) {
-            $this->markTestSkipped('Could not resolve the test database identity: '.$e->getMessage());
-        }
-
-        if ($targetDb === $defaultDb) {
-            $this->markTestSkipped('Refusing to run: DB_PG_TEST_CONNECTION resolves to the default connection database.');
-        }
-
-        if (preg_match('/(_test|_testing|-test|-testing)/i', $targetDb) !== 1) {
-            $this->markTestSkipped('Refusing to run: test database name lacks a clear _test/_testing marker.');
-        }
-
-        // Passed every gate: safe to route the suite at the isolated test DB.
-        config(['database.default' => $conn]);
+        return $guard->gateDecision(
+            filter_var(env('DB_PG_TEST_ENABLED'), FILTER_VALIDATE_BOOLEAN),
+            $pair['test'],
+            $pair['development'],
+        );
     }
 
     private function makeFileId(string $purpose): int
@@ -253,7 +302,9 @@ final class SignatureSourceBindingSchemaTest extends TestCase
             'certificate_id' => $this->certificateId, 'source_file_id' => $source,
         ]);
 
-        $this->assertViolation(self::SQLSTATE_FK, 'signatures_source_file_id_foreign', fn () => DB::table('files')->where('id', $source)->delete());
+        // ON DELETE RESTRICT raises restrict_violation (23001), not the
+        // insert-direction foreign_key_violation (23503) asserted above.
+        $this->assertViolation(self::SQLSTATE_RESTRICT, 'signatures_source_file_id_foreign', fn () => DB::table('files')->where('id', $source)->delete());
     }
 
     public function test_completed_signature_requires_source_file_id(): void

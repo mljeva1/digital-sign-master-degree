@@ -99,6 +99,68 @@ return [
             'sslmode' => env('DB_SSLMODE', 'prefer'),
         ],
 
+        /*
+        | Isolated PostgreSQL test connection (M13).
+        |
+        | Used ONLY by opt-in physical-schema proofs (SignatureSourceBindingSchemaTest)
+        | that must run against real PostgreSQL CHECK/FK/partial-unique behaviour,
+        | which SQLite cannot represent. It is NEVER the default test connection —
+        | phpunit.xml keeps DB_CONNECTION=sqlite :memory: as the fast baseline.
+        |
+        | Safety: the `database` value never falls back to the development database.
+        | Server credentials MAY be inherited from DB_* so a single local Postgres
+        | works without re-declaring them, but the database name defaults to a
+        | distinct, clearly-marked `_test` name. The test's own isolation gate
+        | (guardIsolatedPostgresConnection) additionally refuses to run unless the
+        | resolved database differs from the default connection's database AND
+        | carries a _test/_testing marker — so an accidental misconfiguration
+        | fails closed instead of touching development data.
+        */
+        'pgsql_test' => [
+            'driver' => 'pgsql',
+            'url' => env('PG_TEST_URL'),
+            'host' => env('PG_TEST_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => env('PG_TEST_PORT', env('DB_PORT', '5432')),
+            'database' => env('PG_TEST_DATABASE', 'digital_sign_master_degree_test'),
+            'username' => env('PG_TEST_USERNAME', env('DB_USERNAME', 'root')),
+            'password' => env('PG_TEST_PASSWORD', env('DB_PASSWORD', '')),
+            'charset' => env('DB_CHARSET', 'utf8'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => 'public',
+            'sslmode' => env('DB_SSLMODE', 'prefer'),
+        ],
+
+        /*
+        | Explicit PostgreSQL DEVELOPMENT identity, used ONLY to resolve the live
+        | development database name for the isolated-test guard.
+        |
+        | Why it exists: phpunit.xml forces DB_DATABASE=:memory:, so during a test
+        | run the env-driven `pgsql` connection no longer points at the real
+        | development database. Handing the guard `database.default` (SQLite
+        | :memory:) would compare a PostgreSQL database against a SQLite file and
+        | would never prove isolation between two REAL PostgreSQL databases.
+        |
+        | The database name therefore comes from PG_DEVELOPMENT_DATABASE with a
+        | literal default — never from DB_DATABASE. This connection is read-only
+        | for guard purposes (SELECT current_database()); no migration, and no
+        | fixture write, ever targets it.
+        */
+        'pgsql_development' => [
+            'driver' => 'pgsql',
+            'url' => env('PG_DEVELOPMENT_URL'),
+            'host' => env('PG_DEVELOPMENT_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => env('PG_DEVELOPMENT_PORT', env('DB_PORT', '5432')),
+            'database' => env('PG_DEVELOPMENT_DATABASE', 'digital_sign_master_degree'),
+            'username' => env('PG_DEVELOPMENT_USERNAME', env('DB_USERNAME', 'root')),
+            'password' => env('PG_DEVELOPMENT_PASSWORD', env('DB_PASSWORD', '')),
+            'charset' => env('DB_CHARSET', 'utf8'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => 'public',
+            'sslmode' => env('DB_SSLMODE', 'prefer'),
+        ],
+
         'sqlsrv' => [
             'driver' => 'sqlsrv',
             'url' => env('DB_URL'),

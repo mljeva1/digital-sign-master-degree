@@ -466,7 +466,8 @@
 
     <div class="notice">
         Ovaj PDF je generiran iz zaključanog snapshota ugovora.
-        Dokument nije kriptografski digitalno potpisan.
+        Ovaj PDF ne sadrži ugrađeni elektronički potpis. Kriptografski potpis, ako je izrađen,
+        pohranjen je kao zaseban CMS/PKCS#7 artefakt i provjerava se odvojeno putem javne provjere.
     </div>
 
     @if ($qrCodeDataUri && $verificationUrl)
@@ -479,7 +480,7 @@
                     <td class="verification-copy">
                         <strong>Skenirajte QR code za javnu provjeru hash vrijednosti dokumenta.</strong>
                         <p class="verification-url">{{ $verificationUrl }}</p>
-                        <p>Dokument nije kriptografski digitalno potpisan.</p>
+                        <p>PDF ne sadrži ugrađeni potpis; kriptografski potpis, ako postoji, zaseban je CMS/PKCS#7 artefakt provjerljiv javnom provjerom.</p>
                     </td>
                 </tr>
             </table>
