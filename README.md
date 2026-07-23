@@ -14,13 +14,15 @@ Status:                                          lokalni akademski prototip
 M10–M12 signing workflow:                        COMPLETED
 M13 final validation & thesis readiness:         COMPLETED
 M14 — Certificate request and controlled
-     issuance workflow:                          PLANNED / NOT STARTED
+     issuance workflow:                          IMPLEMENTATION COMPLETE — pending independent audit
 Production deployment:                           nije cilj trenutačnog scopea
 ```
 
 Signing workflow (M10 servis → M11 orkestracija/persistencija → M12 korisnički sloj) je
-funkcionalno zaokružen. M13 (finalna validacija, usklađivanje dokumentacije, thesis evidence)
-je u završnoj validaciji i još nije commitan.
+funkcionalno zaokružen. M14 dodaje korisnički tok zahtjeva za certifikatom i kontrolirano
+lokalno izdavanje (operater → atomski database queue → dedicated worker → per-user leaf
+certifikat → `SignerCertificateRegistrar`). M14 je implementiran, ali **još nije neovisno
+auditiran ni zatvoren**.
 
 ## Projekt i opseg
 
@@ -50,6 +52,11 @@ je u završnoj validaciji i još nije commitan.
 - Detached CMS/PKCS#7 potpis kao zaseban `.p7s` artefakt.
 - Signing audit i perzistirani javni prikaz potpisnog statusa (8 odvojenih signala).
 - Privatna pohrana i exact source→PDF integrity binding.
+- **M14 — zahtjev i kontrolirano izdavanje certifikata:** korisnik podnese zahtjev →
+  `certificate_operator` odobri → approval atomski (isti database queue) stvara jedan
+  issuance job → dedicated worker izdaje per-user leaf certifikat i atomski veže
+  `Certificate`, `issued` status i completion audit. State machine, PostgreSQL constraint
+  shape, operator authority locking i audit allow-lista čuvaju invarijante.
 
 ## Arhitektura
 
@@ -158,6 +165,61 @@ php artisan signing:provision-local-signer <USER_ID>
   certifikata iz istog trust anchora). Nije runtime ovisnost i ne konfigurira se.
 - Ispis naredbe **ne prikazuje** privatni ključ, passphrase ni apsolutne putanje.
 
+## Certificate request and controlled issuance (M14)
+
+Uz ručni provisioning, M14 dodaje korisnički tok u kojem certifikat izdaje **dedicated
+worker** nakon operaterovog odobrenja:
+
+```text
+korisnik podnese zahtjev
+  → certificate_operator odobri
+  → approval atomski (isti database queue, isti connection) stvara jedan issuance job
+  → dedicated worker preuzme isti request/attempt (approved → issuing)
+  → izda se zaseban per-user X.509 leaf certifikat (native ext-openssl)
+  → SignerCertificateRegistrar validira profil, key-match i trust te registrira Certificate
+  → Certificate + issued status + completion audit završe atomski
+  → korisnik u UI-u vidi issued ili failed
+```
+
+- **Operator bootstrap (lokalno):** dodijeli/oduzmi ulogu
+  `php artisan certificate-operator:grant <USER_ID>` (`--revoke` za oduzimanje). Naredba
+  koristi isti authority locking protokol (user-row → pivot `FOR UPDATE`) kao review tok.
+- **Dedicated worker (pokreni tek nakon pune M14 implementacije):**
+
+  ```powershell
+  php artisan queue:work database --queue=certificate-issuance --tries=3
+  ```
+
+  `certificate-issuance` je **zaseban** queue; default queue listener ili `composer dev` ga
+  **ne konzumiraju** osim ako je izričito tako konfiguriran, pa globalno queue ponašanje
+  ostaje nepromijenjeno.
+- **Zajednički servis:** i provisioning naredba i worker koriste isti
+  `LocalSignerCertificateIssuanceService` za per-user leaf issuance i isti
+  `SignerCertificateRegistrar`. Samo naredba smije **bootstrapati/oporaviti** Root CA + ključeve
+  + passphrase; worker izdaje **isključivo** iz već postojećeg, strukturno potvrđenog roota i
+  fail-closed odbija ako root nije potpun/siguran/valjan.
+- **Root CA privatni ključ = local/testing issuance-plane only:** učitavaju ga samo
+  bootstrap naredba, worker i njihov zajednički servis. **Nikad** HTTP controller, Form Request,
+  Blade view, normalni CMS document-signing servis, javna provjera, queue serializer, audit ni
+  logger. Nije opcija u `config/signing.php` koju čita signing runtime.
+- **Shared signer key, per-user certifikat:** kao i kod provisioninga — svi dijele jedan
+  privatni ključ, svatko dobiva zaseban certifikat, korisnik ključ **ne dobiva**, nema
+  non-repudiationa. Leaf subject ne sadrži OIB/ime/e-mail ni druge PII podatke.
+- **Job business payload:** samo `certificate_request_id` + `issuance_attempt_id`; nikad model,
+  korisnik, napomena, putanja ni tajna. Worker sve ostalo ponovno čita iz baze pod lockom.
+- **Audit događaji:** `certificate.issuance.started`, `certificate.issuance.completed`,
+  `certificate.issuance.failed` (`success=false`). Actor je konkretni operater
+  (`reviewed_by_user_id`), nikad `auth()`. Metadata je stroga allow-lista (operation, statusi,
+  request/subject/operator id, `certificate_id` kod issued, `failure_code` kod failed,
+  `compensation_incomplete` kad treba) — bez napomena, PII-ja, DN-a, seriala, attempt UUID-a,
+  putanja, PEM-a ni raw errora.
+- **Failure/retry granica:** trajni sigurnosni/domenski failure zapisuje terminalni `failed`
+  samo iz `issuing`, sa stabilnim `failure_code` (npr. `ISSUANCE_SIGNING_ROOT_UNAVAILABLE`,
+  `ISSUANCE_ACTIVE_CERTIFICATE_EXISTS`, `ISSUANCE_COMPLETION_UNSAFE`), bez raw exceptiona.
+  Prolazni lock/deadlock se **ne** zapisuje terminalno — job retryira isti attempt; tek
+  iscrpljeni retryji označe `ISSUANCE_RETRIES_EXHAUSTED`. `failed` je terminalno i nikad se ne
+  vraća u `approved`/`issuing`.
+
 ## Workflow
 
 ```text
@@ -203,8 +265,12 @@ $env:DB_PG_TEST_ENABLED = 'true'
 $env:DB_PG_TEST_CONNECTION = 'pgsql_test'
 $env:PG_DEVELOPMENT_DATABASE = 'digital_sign_master_degree'
 
-# 3. Combined opt-in PostgreSQL run.
-php artisan test tests/Feature/SignatureSourceBindingSchemaTest.php tests/Feature/Testing/PrepareTestPostgresUrlOverrideIntegrationTest.php
+# 3. Puni fizički PostgreSQL set (32 testa) — isti redoslijed kao stvarni uspješni run.
+php artisan test `
+  tests/Feature/CertificateRequests/CertificateRequestSchemaPostgresTest.php `
+  tests/Feature/CertificateRequests/CertificateOperatorRevokeConcurrencyPostgresTest.php `
+  tests/Feature/SignatureSourceBindingSchemaTest.php `
+  tests/Feature/Testing/PrepareTestPostgresUrlOverrideIntegrationTest.php
 
 # 4. Ukloni privremene varijable.
 Remove-Item Env:DB_PG_TEST_ENABLED -ErrorAction SilentlyContinue
@@ -217,7 +283,11 @@ Bash alternativa (zasebno, ne miješati s PowerShell sintaksom):
 ```bash
 php artisan testing:prepare-postgres
 DB_PG_TEST_ENABLED=true DB_PG_TEST_CONNECTION=pgsql_test PG_DEVELOPMENT_DATABASE=digital_sign_master_degree \
-  php artisan test tests/Feature/SignatureSourceBindingSchemaTest.php tests/Feature/Testing/PrepareTestPostgresUrlOverrideIntegrationTest.php
+  php artisan test \
+    tests/Feature/CertificateRequests/CertificateRequestSchemaPostgresTest.php \
+    tests/Feature/CertificateRequests/CertificateOperatorRevokeConcurrencyPostgresTest.php \
+    tests/Feature/SignatureSourceBindingSchemaTest.php \
+    tests/Feature/Testing/PrepareTestPostgresUrlOverrideIntegrationTest.php
 ```
 
 > Izolacija se dokazuje usporedbom **dvije stvarne PostgreSQL baze**: `pgsql_test` (target) i
@@ -230,33 +300,43 @@ DB_PG_TEST_ENABLED=true DB_PG_TEST_CONNECTION=pgsql_test PG_DEVELOPMENT_DATABASE
 
 ### Testni status
 
-Stvarni rezultati posljednjeg runa (M13 correction ciklus):
+Stvarni rezultati posljednjeg stabilnog runa (M14 P2 re-audit correction ciklus — classifier
+connection-resolution + winner lock/write/flush korekcije, na feature grani):
 
 ```text
 Default suite:
-683 total / 669 passed / 3489 assertions / 14 skipped / 0 failed
+834 total / 797 passed / 4116 assertions / 37 skipped / 0 failed
 
-PostgreSQL schema proofs:
-12 passed / 39 assertions / 0 skipped / 0 failed
+Skip composition (37):
+  32  PostgreSQL opt-in (isolated pgsql_test):
+        17  M14 certificate_requests schema/constraint proofs
+        12  M13 signature source-binding schema proofs
+         2  M14 operator revoke concurrency proofs
+         1  PG_TEST_URL safety integration
+   4  Windows file-symlink (P2-4 shared-material safety) — symlink() traži privilegiju
+   1  SigningTempWorkspace reparse primitive (platform)
 
-PG_TEST_URL safety integration:
-1 passed / 10 assertions / 0 skipped / 0 failed
+Ciljani M14 (dio default suitea):
+  worker lifecycle (CertificateIssuanceWorkerTest):        12 passed
+  issuance service (LocalSignerIssuanceServiceTest):       27 total / 23 passed / 4 skipped
+  transient DB classifier (Unit):                          14 passed
+  PostgreSQL guard (Unit):                                 21 passed
+  registrar (incl. completion seam):                       47 passed
 
-Combined opt-in PostgreSQL run:
-13 passed / 49 assertions / 0 skipped / 0 failed
-
-Schema-gate caller safety test (dio default suitea, bez stvarne baze):
-6 passed / 23 assertions / 0 skipped / 0 failed
+Izvršeni fizički opt-in PostgreSQL run (zaseban, nad stvarnom pgsql_test bazom):
+  32 tests / 32 passed / 126 assertions / 0 skipped / 0 failed
+  target pgsql_test = digital_sign_master_degree_test, dev identitet pgsql_development
+  = digital_sign_master_degree (različite baze, stvarni current_database() prije writea)
 ```
 
-PostgreSQL rezultati se **ne zbrajaju** s default suiteom — schema proofs i URL-safety
-integration su zaseban opt-in run. Default `php artisan test` skipa PostgreSQL opt-in
-testove (uključujući URL-safety integration) kad opt-in nije uključen.
+PostgreSQL rezultati se **ne zbrajaju** s default suiteom — to je zaseban opt-in run koji je
+**stvarno izvršen** nad izoliranom `pgsql_test` bazom (32/32, 0 skipped). Default `php artisan test`
+**skipa** tih 32 opt-in metode kad opt-in nije uključen. **Nema** fizičkog PostgreSQL two-worker
+issuance/completion dokaza (ostaje P3).
 
-**Poznati platform skip:** jedan Windows directory-symlink test skipa se jer `symlink()`
-zahtijeva privilegiju na hostu (Windows junction ekvivalent **prolazi**). U default runu 12
-PostgreSQL opt-in metoda su skipane jer je izolirana PG test baza opt-in; nad `pgsql_test`
-svih 12 prolazi bez skipova.
+**Poznati platform skipovi (bez opt-ina):** 4 Windows file-symlink testa (P2-4) i 1
+SigningTempWorkspace reparse test skipaju se jer `symlink()` traži privilegiju na hostu; Windows
+junction ekvivalenti (directory) **prolaze**.
 
 ### QA statusi
 
@@ -287,6 +367,16 @@ Preporučeni popis snimaka, statusi i pravila sanitizacije:
 - Lokalni **self-signed testni** Root CA; nije production PKI.
 - Potpisnik je tehnički vlasnik zapisa, nikad dokaz da je prodavatelj/kupac potpisao.
 - Stvarni paralelni PostgreSQL signing-race dokaz ostaje **P3** (nije izveden).
+- **M14 (implementirano, još neauditirano):** hard-crash nakon zapisa attempt/leaf datoteke,
+  a prije DB commita, može ostaviti orphan javnog certificate artefakta na disku (create-only,
+  attempt-owned putanja) — **P3 residual** za budući reconciliation scan; ne može proizvesti
+  lažni `issued` ni drugi `Certificate`. Windows ACL/process-isolation temp/artefakt zaštita
+  oslanja se na OS i ostaje **P3** granica. Dublji dvo-konekcijski PostgreSQL worker-race dokaz
+  **nije izvršen** u ovom prolazu (oslonac je partial-unique „one active request per user" +
+  globalni fingerprint unique + SQLite idempotency dokazi). Random serial nema trajnu
+  **attempt→fingerprint provenance** vezu, a globalni exact-fingerprint recovery nema eksplicitnu
+  **request provenance** vezu — oboje ostaju dokumentirani **P3** (bez nove DB provenance migracije
+  u ovom ciklusu); ne omogućuju brisanje pobjednikova artefakta ni dva konačna certifikata.
 
 ## Dokumentacija
 

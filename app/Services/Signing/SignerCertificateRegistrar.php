@@ -10,6 +10,7 @@ use App\Exceptions\Signing\StoredCertificateIntegrityException;
 use App\Models\Certificate;
 use App\Models\StoredFile;
 use App\Models\User;
+use App\Support\Exceptions\PreservedFailure;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Database\QueryException;
@@ -62,7 +63,19 @@ class SignerCertificateRegistrar
         $this->integrityVerifier = $integrityVerifier ?? new StoredCertificateIntegrityVerifier;
     }
 
-    public function register(User $owner, string $certificateInputPath): Certificate
+    /**
+     * @param  (callable(Certificate, bool):void)|null  $onPersisted  Optional completion
+     *                                                                seam invoked INSIDE the persistence transaction — after the
+     *                                                                Certificate is created (recovered=false) or resolved from an
+     *                                                                existing/won row (recovered=true) and BEFORE the transaction
+     *                                                                commits. Throwing from it rolls the whole unit back, so no
+     *                                                                Certificate can commit without its bound completion. It runs on the
+     *                                                                normal insert, the idempotent existing-fingerprint path, AND the
+     *                                                                exact-fingerprint unique-conflict recovery path. A failure that
+     *                                                                implements {@see PreservedFailure} is re-thrown verbatim so its
+     *                                                                neutral code survives instead of being flattened.
+     */
+    public function register(User $owner, string $certificateInputPath, ?callable $onPersisted = null): Certificate
     {
         $this->clearOpenSslErrors();
 
@@ -123,11 +136,12 @@ class SignerCertificateRegistrar
             $this->fail(RegistrationException::CERTIFICATE_LOAD_FAILED);
         }
 
-        return $this->persist((int) $owner->getKey(), $storage, $exported, $fingerprint, $parsed, $validFrom, $validTo);
+        return $this->persist((int) $owner->getKey(), $storage, $exported, $fingerprint, $parsed, $validFrom, $validTo, $onPersisted);
     }
 
     /**
      * @param  array<string, mixed>  $parsed
+     * @param  (callable(Certificate, bool):void)|null  $onPersisted
      */
     private function persist(
         int $ownerId,
@@ -137,6 +151,7 @@ class SignerCertificateRegistrar
         array $parsed,
         Carbon $validFrom,
         Carbon $validTo,
+        ?callable $onPersisted = null,
     ): Certificate {
         $attemptPath = null;
         $writeAttempted = false;
@@ -151,6 +166,7 @@ class SignerCertificateRegistrar
                 $parsed,
                 $validFrom,
                 $validTo,
+                $onPersisted,
                 &$attemptPath,
                 &$writeAttempted,
                 &$pathPreexisted,
@@ -159,7 +175,10 @@ class SignerCertificateRegistrar
 
                 $existing = $this->existingByFingerprint($fingerprint);
                 if ($existing !== null) {
-                    return $this->resolveExisting($owner, $existing, $storage);
+                    $certificate = $this->resolveExisting($owner, $existing, $storage);
+                    $this->runCompletion($onPersisted, $certificate, true);
+
+                    return $certificate;
                 }
 
                 $attemptPath = $this->uniqueAttemptPath($ownerId, $fingerprint);
@@ -177,7 +196,10 @@ class SignerCertificateRegistrar
                     $writeAttempted,
                 );
 
-                return $this->insertCertificateRecords($owner, $storage->disk, $attemptPath, $physicalPem, $fingerprint, $parsed, $validFrom, $validTo);
+                $certificate = $this->insertCertificateRecords($owner, $storage->disk, $attemptPath, $physicalPem, $fingerprint, $parsed, $validFrom, $validTo);
+                $this->runCompletion($onPersisted, $certificate, false);
+
+                return $certificate;
             });
         } catch (Throwable $e) {
             $cleanup = $this->safeDeleteAttempt(
@@ -187,23 +209,36 @@ class SignerCertificateRegistrar
                 $pathPreexisted,
             );
 
+            // A completion-seam failure is already a neutral, allow-listed code
+            // (a stable issuance failure or a transient-retry signal): surface it
+            // VERBATIM so its code — and especially its transient nature — is never
+            // flattened into a generic persistence error.
+            if ($e instanceof PreservedFailure) {
+                throw $e;
+            }
+
             if ($cleanup === self::CLEANUP_INCOMPLETE) {
-                throw RegistrationException::of(RegistrationException::CERTIFICATE_PERSISTENCE_FAILED)
+                // Preserve the original cause in the chain so a transient DB
+                // lock/deadlock is still recognisable downstream; the raw message
+                // never reaches the safe message.
+                throw RegistrationException::of(RegistrationException::CERTIFICATE_PERSISTENCE_FAILED, $e)
                     ->markCompensationIncomplete();
             }
 
             try {
                 if ($this->isFingerprintUniqueViolation($e)) {
-                    return $this->recoverFromUniqueConflict($ownerId, $fingerprint, $storage);
+                    return $this->recoverFromUniqueConflict($ownerId, $fingerprint, $storage, $onPersisted);
                 }
 
                 $exception = $e instanceof RegistrationException
                     ? $e
-                    : RegistrationException::of(RegistrationException::CERTIFICATE_PERSISTENCE_FAILED);
+                    : RegistrationException::of(RegistrationException::CERTIFICATE_PERSISTENCE_FAILED, $e);
+            } catch (PreservedFailure $recoveryPreserved) {
+                throw $recoveryPreserved;
             } catch (Throwable $recoveryFailure) {
                 $exception = $recoveryFailure instanceof RegistrationException
                     ? $recoveryFailure
-                    : RegistrationException::of(RegistrationException::CERTIFICATE_PERSISTENCE_FAILED);
+                    : RegistrationException::of(RegistrationException::CERTIFICATE_PERSISTENCE_FAILED, $recoveryFailure);
             }
 
             throw $exception;
@@ -307,9 +342,12 @@ class SignerCertificateRegistrar
         return $existing->refresh();
     }
 
-    private function recoverFromUniqueConflict(int $ownerId, string $fingerprint, ValidatedCertificateStorage $storage): Certificate
+    /**
+     * @param  (callable(Certificate, bool):void)|null  $onPersisted
+     */
+    private function recoverFromUniqueConflict(int $ownerId, string $fingerprint, ValidatedCertificateStorage $storage, ?callable $onPersisted = null): Certificate
     {
-        return DB::transaction(function () use ($ownerId, $fingerprint, $storage): Certificate {
+        return DB::transaction(function () use ($ownerId, $fingerprint, $storage, $onPersisted): Certificate {
             $owner = $this->lockOwnerOrFail($ownerId);
 
             $winner = Certificate::query()->where('thumbprint_sha256', $fingerprint)->first();
@@ -317,8 +355,24 @@ class SignerCertificateRegistrar
                 throw RegistrationException::of(RegistrationException::CERTIFICATE_PERSISTENCE_FAILED);
             }
 
-            return $this->resolveExisting($owner, $winner, $storage);
+            $certificate = $this->resolveExisting($owner, $winner, $storage);
+            $this->runCompletion($onPersisted, $certificate, true);
+
+            return $certificate;
         });
+    }
+
+    /**
+     * Invoke the optional completion seam inside the current persistence
+     * transaction. Any throw propagates and rolls the transaction back.
+     *
+     * @param  (callable(Certificate, bool):void)|null  $onPersisted
+     */
+    private function runCompletion(?callable $onPersisted, Certificate $certificate, bool $recovered): void
+    {
+        if ($onPersisted !== null) {
+            $onPersisted($certificate, $recovered);
+        }
     }
 
     private function assertStoredCertificateIntegrity(Certificate $existing, ValidatedCertificateStorage $storage): void

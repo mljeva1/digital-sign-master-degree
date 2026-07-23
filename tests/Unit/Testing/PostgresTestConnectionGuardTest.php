@@ -196,4 +196,43 @@ final class PostgresTestConnectionGuardTest extends TestCase
         $this->assertSame(PostgresTestConnectionGuard::ACTION_FAIL, $decision['action']);
         $this->assertNotNull($decision['reason']);
     }
+
+    // --- P2-5: the development identity is the explicit pgsql_development ------
+
+    /**
+     * MUTATION-SENSITIVE: fails if the development identity ever reverts to the
+     * raw runtime `pgsql` connection or to `database.default`.
+     */
+    public function test_development_identity_is_the_explicit_pgsql_development_connection(): void
+    {
+        $this->assertSame('pgsql_development', PostgresTestConnectionGuard::DEVELOPMENT_CONNECTION);
+        $this->assertNotSame('pgsql', PostgresTestConnectionGuard::DEVELOPMENT_CONNECTION);
+        $this->assertNotSame(config('database.default'), PostgresTestConnectionGuard::DEVELOPMENT_CONNECTION);
+    }
+
+    public function test_target_may_never_be_the_dev_identity_or_the_runtime_connection(): void
+    {
+        $guard = $this->guard([
+            'pgsql' => self::DEV_DB,
+            'pgsql_development' => self::DEV_DB,
+            'pgsql_test' => self::TEST_DB,
+        ]);
+
+        // The dedicated development identity can never be the isolated target.
+        $this->assertFalse($guard->assess('pgsql_development', 'pgsql_development')->safe);
+        // The raw runtime connection can never be the isolated target either.
+        $this->assertFalse($guard->assess('pgsql', 'pgsql_development')->safe);
+    }
+
+    public function test_assess_isolates_against_the_explicit_development_identity(): void
+    {
+        // With pgsql_development as the dev identity, a distinct marked target runs.
+        $result = $this->guard([
+            'pgsql_development' => self::DEV_DB,
+            'pgsql_test' => self::TEST_DB,
+        ])->assess('pgsql_test', PostgresTestConnectionGuard::DEVELOPMENT_CONNECTION);
+
+        $this->assertTrue($result->safe);
+        $this->assertSame(self::DEV_DB, $result->developmentDatabase);
+    }
 }

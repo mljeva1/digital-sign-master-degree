@@ -25,8 +25,19 @@ final class PostgresTestConnectionGuard
     /** @var non-empty-string */
     public const TEST_CONNECTION = 'pgsql_test';
 
-    /** @var non-empty-string */
-    public const DEVELOPMENT_CONNECTION = 'pgsql';
+    /**
+     * The development identity is the EXPLICIT, dedicated `pgsql_development`
+     * connection — never the raw runtime `pgsql` connection and never
+     * `config('database.default')` (which under phpunit.xml is SQLite :memory:).
+     * Comparing against a non-PostgreSQL or ambiguous default could never prove
+     * isolation between two real PostgreSQL databases.
+     *
+     * @var non-empty-string
+     */
+    public const DEVELOPMENT_CONNECTION = 'pgsql_development';
+
+    /** The raw runtime PostgreSQL connection — never a valid isolated test target. */
+    private const RUNTIME_CONNECTION = 'pgsql';
 
     public const ACTION_SKIP = 'skip';
 
@@ -46,9 +57,11 @@ final class PostgresTestConnectionGuard
             return PostgresGuardResult::unsafe('No test connection was named.');
         }
 
-        if ($targetConnection === $developmentConnection || $targetConnection === self::DEVELOPMENT_CONNECTION) {
+        if ($targetConnection === $developmentConnection
+            || $targetConnection === self::DEVELOPMENT_CONNECTION
+            || $targetConnection === self::RUNTIME_CONNECTION) {
             return PostgresGuardResult::unsafe(
-                "Target connection [{$targetConnection}] must be a dedicated test connection, never the development connection or \"".self::DEVELOPMENT_CONNECTION.'".'
+                "Target connection [{$targetConnection}] must be a dedicated test connection, never the development identity \"".self::DEVELOPMENT_CONNECTION.'" or the runtime "'.self::RUNTIME_CONNECTION.'".'
             );
         }
 

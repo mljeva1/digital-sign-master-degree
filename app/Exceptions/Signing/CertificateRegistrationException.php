@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Exceptions\Signing;
 
 use RuntimeException;
+use Throwable;
 
 /**
  * Normalized, secret-free failure for signer-certificate registration.
@@ -52,13 +53,18 @@ final class CertificateRegistrationException extends RuntimeException
     public function __construct(
         public readonly string $errorCode,
         string $safeMessage,
+        ?Throwable $previous = null,
     ) {
-        parent::__construct($safeMessage);
+        // The original cause is preserved ONLY in the exception chain (never in
+        // the safe message) so a downstream transient-DB classifier can inspect a
+        // wrapped SQLSTATE without the raw driver text ever reaching the DB,
+        // audit, UI, session, or output.
+        parent::__construct($safeMessage, 0, $previous);
     }
 
-    public static function of(string $code): self
+    public static function of(string $code, ?Throwable $previous = null): self
     {
-        return new self($code, self::messageFor($code));
+        return new self($code, self::messageFor($code), $previous);
     }
 
     public function errorCode(): string

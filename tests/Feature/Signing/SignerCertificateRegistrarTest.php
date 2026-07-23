@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Signing;
 
+use App\Domain\CertificateRequests\IssuanceFailureCode;
+use App\Exceptions\CertificateRequests\IssuanceException;
 use App\Exceptions\Signing\CertificateRegistrationException as RegistrationException;
 use App\Models\Certificate;
 use App\Models\StoredFile;
@@ -920,5 +922,61 @@ final class SignerCertificateRegistrarTest extends SigningTestCase
         $this->assertCount(1, $store); // written file still present (orphan for reconciliation)
         $this->assertSame(0, Certificate::query()->count());
         $this->assertSame(0, StoredFile::query()->count());
+    }
+
+    // --- M14 completion seam --------------------------------------------------
+
+    public function test_completion_seam_runs_on_fresh_insert_and_commits_atomically(): void
+    {
+        $setup = $this->validSetup();
+        $user = User::factory()->create();
+
+        $seen = [];
+        $certificate = $this->registrar()->register($user, $setup['input'], function (Certificate $c, bool $recovered) use (&$seen): void {
+            $seen = ['id' => (int) $c->id, 'recovered' => $recovered];
+        });
+
+        $this->assertSame((int) $certificate->id, $seen['id']);
+        $this->assertFalse($seen['recovered'], 'a fresh insert is not a recovery');
+        $this->assertSame(1, Certificate::query()->count());
+        $this->assertSame(1, StoredFile::query()->count());
+    }
+
+    public function test_completion_seam_failure_rolls_back_certificate_and_storedfile_verbatim(): void
+    {
+        $setup = $this->validSetup();
+        $user = User::factory()->create();
+
+        try {
+            $this->registrar()->register($user, $setup['input'], function (): void {
+                throw IssuanceException::of(
+                    IssuanceFailureCode::COMPLETION_UNSAFE
+                );
+            });
+            $this->fail('The completion-seam failure must propagate.');
+        } catch (IssuanceException $e) {
+            // The neutral code survives verbatim rather than being flattened.
+            $this->assertSame(IssuanceFailureCode::COMPLETION_UNSAFE, $e->failureCode());
+        }
+
+        // The whole unit rolled back: no Certificate, no StoredFile.
+        $this->assertSame(0, Certificate::query()->count());
+        $this->assertSame(0, StoredFile::query()->count());
+    }
+
+    public function test_completion_seam_runs_with_recovered_true_on_existing_fingerprint(): void
+    {
+        $setup = $this->validSetup();
+        $user = User::factory()->create();
+
+        $this->registrar()->register($user, $setup['input']); // first commit
+
+        $seen = [];
+        $this->registrar()->register($user, $setup['input'], function (Certificate $c, bool $recovered) use (&$seen): void {
+            $seen = ['recovered' => $recovered];
+        });
+
+        $this->assertTrue($seen['recovered'], 'the idempotent existing-fingerprint path is a recovery');
+        $this->assertSame(1, Certificate::query()->count(), 'no duplicate certificate');
     }
 }

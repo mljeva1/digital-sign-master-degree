@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Domain\CertificateRequests\IssuanceFailureCode;
+use App\Exceptions\CertificateRequests\IssuanceException;
 use App\Exceptions\Signing\CertificateRegistrationException as RegistrationException;
 use App\Models\Certificate;
 use App\Models\User;
+use App\Services\Signing\LocalSignerCertificateIssuanceService;
 use App\Services\Signing\LocalSigningRoot;
 use App\Services\Signing\SignerCertificateRegistrar;
 use Illuminate\Console\Command;
@@ -18,29 +21,30 @@ use Throwable;
  * and a passphrase file — written into an EXTERNAL directory the operator
  * chooses — followed by registration of the signer certificate for a user.
  *
- * Single-key model (matches M10 SigningConfig, which configures exactly ONE
- * private key): the Root CA, private key and passphrase are SHARED and created
- * once. A later run for a different user REUSES them and only issues that user's
- * own signer certificate (own serial => own fingerprint, so the global unique
- * thumbprint still holds) from the same key. Every issued certificate therefore
- * matches the one configured private key, so no per-user multi-key architecture
- * is introduced.
+ * BOOTSTRAP / RECOVERY ROLE: this command owns the ONLY bootstrap capability of
+ * the local issuance plane. The shared Root CA, its private key, the shared
+ * signer key and the passphrase are created once here (or recovered), and every
+ * later run — including the dedicated worker — REUSES them. The per-user leaf
+ * issuance itself is delegated to the shared
+ * {@see LocalSignerCertificateIssuanceService}, so the command and the worker run
+ * the identical OpenSSL/serial/profile logic and register through the same
+ * {@see SignerCertificateRegistrar}.
+ *
+ * Single-key model (matches SigningConfig, which configures exactly ONE private
+ * key): a later run for a different user REUSES the shared key and only issues
+ * that user's own signer certificate (own serial => own fingerprint), so no
+ * per-user multi-key architecture is introduced.
  *
  * Safety contract:
  *  - refuses to run outside APP_ENV=local/testing (production always refused);
  *  - writes ONLY inside the canonical project-local signing root, whose identity
- *    is proven STRUCTURALLY by LocalSigningRoot (the real direct child `local` of
- *    the real `<storage>/app/private/signing`) rather than taken from its own
- *    realpath(); a junction/symlink AT the root, a repointed
- *    `signing.local_material_path`, an external directory, a traversal segment,
- *    and a symlink/junction escape below the root are all refused;
+ *    is proven STRUCTURALLY by LocalSigningRoot rather than taken from realpath();
  *  - never overwrites: a pre-existing per-user certificate file, or an
  *    already-active signer certificate for the user, aborts before any write;
  *  - the passphrase is generated randomly, written 0600, and NEVER printed;
  *  - on a failed registration only the files THIS run created are deleted
  *    (shared CA/key reused from an earlier run are never removed);
- *  - output contains no private key content, passphrase, or absolute path —
- *    only file names and the safe next steps.
+ *  - output contains no private key content, passphrase, or absolute path.
  */
 final class ProvisionLocalSigner extends Command
 {
@@ -50,43 +54,10 @@ final class ProvisionLocalSigner extends Command
 
     protected $description = 'LOCAL-ONLY: provision a test Root CA + signer identity for a user in the project-local signing root (never in production).';
 
-    private const FILE_ROOT_CA = 'test-root-ca.pem';
-
-    /**
-     * Provisioning-only local test CA key: required to issue a further user's
-     * certificate from the same trust anchor. Never referenced by
-     * config/signing.php and never loaded by the signing runtime.
-     */
-    private const FILE_ROOT_CA_KEY = 'test-root-ca-key.pem';
-
-    private const FILE_SIGNER_CERT = 'test-signer-cert.pem';
-
-    private const FILE_SIGNER_KEY = 'test-signer-key.pem';
-
-    private const FILE_PASSPHRASE = 'test-signer-passphrase.txt';
-
-    private const OPENSSL_CNF = <<<'CNF'
-[req]
-distinguished_name = req_dn
-prompt = no
-
-[req_dn]
-CN = DSMD Local Test
-
-[v3_ca]
-basicConstraints = critical,CA:TRUE
-keyUsage = critical,keyCertSign,cRLSign
-subjectKeyIdentifier = hash
-
-[v3_signer]
-basicConstraints = critical,CA:FALSE
-keyUsage = critical,digitalSignature
-extendedKeyUsage = emailProtection
-subjectKeyIdentifier = hash
-CNF;
-
-    public function __construct(private readonly LocalSigningRoot $boundary)
-    {
+    public function __construct(
+        private readonly LocalSigningRoot $boundary,
+        private readonly LocalSignerCertificateIssuanceService $issuance,
+    ) {
         parent::__construct();
     }
 
@@ -172,7 +143,9 @@ CNF;
         $this->line('Shared Root CA / key: '.($material['reusedSharedMaterial'] ? 'REUSED (existing)' : 'CREATED (first run)'));
         $this->newLine();
         $this->line('Material lives in the project-local signing root (gitignored):');
-        $this->line('  '.self::FILE_SIGNER_KEY.', '.self::FILE_PASSPHRASE.', '.self::FILE_ROOT_CA.', '.$userCertName);
+        $this->line('  '.LocalSignerCertificateIssuanceService::FILE_SIGNER_KEY.', '
+            .LocalSignerCertificateIssuanceService::FILE_PASSPHRASE.', '
+            .LocalSignerCertificateIssuanceService::FILE_ROOT_CA.', '.$userCertName);
         $this->line('config/signing.php already resolves these by default — no .env change is needed locally.');
         $this->line('The passphrase file content is secret: never commit, print, or share it.');
 
@@ -199,16 +172,8 @@ CNF;
      *
      * The root itself is NOT trusted from its own realpath(): LocalSigningRoot
      * proves it is the real direct child `local` of the real
-     * `<storage>/app/private/signing` directory, so a junction/reparse point at
-     * the root cannot promote an external target into the allowed boundary. The
-     * configured value is additionally cross-checked against that expectation,
-     * so repointing the config cannot move the boundary either.
-     *
-     * Only the canonical root is ever created. --directory is a RELATIVE subpath
-     * that must ALREADY exist in full: it is walked segment by segment and never
-     * created, so an absolute/UNC path, a traversal segment, a missing segment,
-     * and any symlink/junction escape are all refused before a single byte is
-     * written. No absolute path is echoed back.
+     * `<storage>/app/private/signing` directory. Only the canonical root is ever
+     * created. --directory is a RELATIVE subpath that must ALREADY exist in full.
      */
     private function resolveTargetDirectory(string $raw): ?string
     {
@@ -247,13 +212,6 @@ CNF;
 
     /**
      * Walk the requested subpath one segment at a time, creating NOTHING.
-     *
-     * Every segment must already exist, be a real directory, and be the real
-     * direct child of the previous canonical segment. A missing segment fails
-     * closed BEFORE any filesystem or DB write — which is the whole point:
-     * a recursive mkdir() here would follow a junction segment and materialise
-     * a directory outside the canonical root before the containment check could
-     * refuse it.
      */
     private function resolveExistingSubdirectory(string $root, string $raw): ?string
     {
@@ -274,9 +232,6 @@ CNF;
                 return null;
             }
 
-            // Same structural rule as the root itself, applied per segment: a
-            // junction/symlink/reparse point makes the canonical path diverge
-            // from its expected parent, and is refused before anything is used.
             $verified = $this->boundary->verifyDirectChild($candidate, $current, $segment);
             if ($verified === null || ! $this->boundary->isWithin($verified, $root)) {
                 $this->error('Refused: the target directory must be inside the project-local signing root.');
@@ -320,187 +275,41 @@ CNF;
     }
 
     /**
-     * Resolve the shared Root CA + private key (reusing them when a previous run
-     * already created them) and issue THIS user's own signer certificate from
-     * that same key. Only files this run creates enter $createdFiles, so
-     * compensation can never delete shared material an earlier run owns.
+     * Delegate the shared material (bootstrap or reuse) and the per-user leaf
+     * generation to {@see LocalSignerCertificateIssuanceService} — the very same
+     * engine the worker uses — then write THIS user's certificate file. Only
+     * files this run creates enter $createdFiles.
      *
      * @param  list<string>  $createdFiles
      * @return array{rootCaPath: string, signerCertPath: string, keyPath: string, passphrasePath: string, reusedSharedMaterial: bool}
      */
     private function resolveMaterial(string $directory, int $userId, array &$createdFiles): array
     {
-        $rootCaPath = $directory.DIRECTORY_SEPARATOR.self::FILE_ROOT_CA;
-        $caKeyPath = $directory.DIRECTORY_SEPARATOR.self::FILE_ROOT_CA_KEY;
-        $keyPath = $directory.DIRECTORY_SEPARATOR.self::FILE_SIGNER_KEY;
-        $passphrasePath = $directory.DIRECTORY_SEPARATOR.self::FILE_PASSPHRASE;
+        $rootCaPath = $directory.DIRECTORY_SEPARATOR.LocalSignerCertificateIssuanceService::FILE_ROOT_CA;
+        $keyPath = $directory.DIRECTORY_SEPARATOR.LocalSignerCertificateIssuanceService::FILE_SIGNER_KEY;
+        $passphrasePath = $directory.DIRECTORY_SEPARATOR.LocalSignerCertificateIssuanceService::FILE_PASSPHRASE;
         $userCertPath = $directory.DIRECTORY_SEPARATOR.$this->userCertificateFilename($userId);
+        $genericPath = $directory.DIRECTORY_SEPARATOR.LocalSignerCertificateIssuanceService::FILE_SIGNER_CERT;
 
-        $sharedExists = is_file($rootCaPath) && is_file($keyPath) && is_file($passphrasePath);
+        $material = $this->issuance->bootstrapOrLoadMaterial($directory, $createdFiles);
 
-        // A throwaway OpenSSL config is required for extension profiles; it
-        // contains no secret and is removed best-effort at the end.
-        $cnfPath = $directory.DIRECTORY_SEPARATOR.'openssl-'.bin2hex(random_bytes(4)).'.cnf';
-        $this->writeChecked($cnfPath, self::OPENSSL_CNF, $createdFiles);
+        $signerPem = $this->issuance->generateLeafPem($material);
 
-        try {
-            if ($sharedExists) {
-                // REUSE: the single configured key stays authoritative, so every
-                // user's certificate keeps matching it.
-                [$caCert, $caKey, $signerKey, $passphrase] = $this->loadSharedMaterial($rootCaPath, $caKeyPath, $keyPath, $passphrasePath);
-            } else {
-                [$caCert, $caKey, $signerKey, $passphrase] = $this->createSharedMaterial($cnfPath, $rootCaPath, $caKeyPath, $keyPath, $passphrasePath, $createdFiles);
-            }
+        $this->writeChecked($userCertPath, $signerPem, $createdFiles);
 
-            $signerCsr = openssl_csr_new(['commonName' => 'DSMD Local Test Signer'], $signerKey, [
-                'config' => $cnfPath, 'digest_alg' => 'sha256',
-            ]);
-            $signerCert = $signerCsr === false ? false : openssl_csr_sign($signerCsr, $caCert, $caKey, 825, [
-                'config' => $cnfPath, 'x509_extensions' => 'v3_signer', 'digest_alg' => 'sha256',
-            ], random_int(1, PHP_INT_MAX));
-            if ($signerCert === false) {
-                throw new \RuntimeException('Signer certificate generation failed.');
-            }
-
-            $signerPem = '';
-            if (openssl_x509_export($signerCert, $signerPem) !== true) {
-                throw new \RuntimeException('Certificate export failed.');
-            }
-
-            $this->writeChecked($userCertPath, $signerPem, $createdFiles);
-
-            // Keep the generic name populated on the very first run only; it is
-            // never overwritten afterwards.
-            $genericPath = $directory.DIRECTORY_SEPARATOR.self::FILE_SIGNER_CERT;
-            if (! file_exists($genericPath)) {
-                $this->writeChecked($genericPath, $signerPem, $createdFiles);
-            }
-
-            return [
-                'rootCaPath' => $rootCaPath,
-                'signerCertPath' => $userCertPath,
-                'keyPath' => $keyPath,
-                'passphrasePath' => $passphrasePath,
-                'reusedSharedMaterial' => $sharedExists,
-            ];
-        } finally {
-            // The throwaway config carries no secret; drop it from disk and
-            // from the compensation list when the delete is confirmed.
-            if (@unlink($cnfPath)) {
-                $createdFiles = array_values(array_diff($createdFiles, [$cnfPath]));
-            }
-        }
-    }
-
-    /**
-     * Load the shared Root CA + signer key an earlier run created, so a second
-     * user is issued from the SAME trust anchor and the SAME private key that
-     * SigningConfig already points at.
-     *
-     * Issuing a further certificate requires the local test CA's own key, which
-     * this command keeps as a provisioning-only artefact next to the material.
-     * It is never referenced by config/signing.php and never loaded by signing —
-     * only here, at provisioning time.
-     *
-     * @return array{0: \OpenSSLCertificate, 1: \OpenSSLAsymmetricKey, 2: \OpenSSLAsymmetricKey, 3: string}
-     */
-    private function loadSharedMaterial(string $rootCaPath, string $caKeyPath, string $keyPath, string $passphrasePath): array
-    {
-        if (! is_file($caKeyPath)) {
-            throw new \RuntimeException('The local test CA key is missing; this signing root cannot issue another certificate.');
+        // Keep the generic name populated on the very first run only; it is never
+        // overwritten afterwards.
+        if (! file_exists($genericPath)) {
+            $this->writeChecked($genericPath, $signerPem, $createdFiles);
         }
 
-        $passphrase = $this->stripSingleTrailingLineEnding((string) file_get_contents($passphrasePath));
-
-        $signerKey = openssl_pkey_get_private((string) file_get_contents($keyPath), $passphrase);
-        if ($signerKey === false) {
-            throw new \RuntimeException('Existing signer key could not be loaded.');
-        }
-
-        $caKey = openssl_pkey_get_private((string) file_get_contents($caKeyPath), $passphrase);
-        if ($caKey === false) {
-            throw new \RuntimeException('Existing local test CA key could not be loaded.');
-        }
-
-        $caCert = openssl_x509_read((string) file_get_contents($rootCaPath));
-        if ($caCert === false) {
-            throw new \RuntimeException('Existing Root CA could not be read.');
-        }
-
-        return [$caCert, $caKey, $signerKey, $passphrase];
-    }
-
-    /**
-     * @param  list<string>  $createdFiles
-     * @return array{0: \OpenSSLCertificate, 1: \OpenSSLAsymmetricKey, 2: \OpenSSLAsymmetricKey, 3: string}
-     */
-    private function createSharedMaterial(string $cnfPath, string $rootCaPath, string $caKeyPath, string $keyPath, string $passphrasePath, array &$createdFiles): array
-    {
-        $caKey = $this->newKey($cnfPath);
-        $caCsr = openssl_csr_new(['commonName' => 'DSMD Local Test Root CA'], $caKey, [
-            'config' => $cnfPath, 'digest_alg' => 'sha256',
-        ]);
-        $caCert = $caCsr === false ? false : openssl_csr_sign($caCsr, null, $caKey, 3650, [
-            'config' => $cnfPath, 'x509_extensions' => 'v3_ca', 'digest_alg' => 'sha256',
-        ], random_int(1, PHP_INT_MAX));
-        if ($caCert === false) {
-            throw new \RuntimeException('Root CA generation failed.');
-        }
-
-        $signerKey = $this->newKey($cnfPath);
-
-        $caPem = '';
-        if (openssl_x509_export($caCert, $caPem) !== true) {
-            throw new \RuntimeException('Root CA export failed.');
-        }
-
-        $passphrase = bin2hex(random_bytes(24));
-        $encryptedKeyPem = '';
-        $encryptedCaKeyPem = '';
-        if (openssl_pkey_export($signerKey, $encryptedKeyPem, $passphrase, ['config' => $cnfPath]) !== true
-            || openssl_pkey_export($caKey, $encryptedCaKeyPem, $passphrase, ['config' => $cnfPath]) !== true) {
-            throw new \RuntimeException('Private key export failed.');
-        }
-
-        $this->writeChecked($rootCaPath, $caPem, $createdFiles);
-        $this->writeChecked($keyPath, $encryptedKeyPem, $createdFiles);
-        $this->writeChecked($passphrasePath, $passphrase, $createdFiles);
-        // Provisioning-only: needed to issue a further user's certificate from
-        // the same trust anchor. Never configured, never read by signing.
-        $this->writeChecked($caKeyPath, $encryptedCaKeyPem, $createdFiles);
-        @chmod($keyPath, 0600);
-        @chmod($passphrasePath, 0600);
-        @chmod($caKeyPath, 0600);
-
-        return [$caCert, $caKey, $signerKey, $passphrase];
-    }
-
-    private function stripSingleTrailingLineEnding(string $value): string
-    {
-        if (str_ends_with($value, "\r\n")) {
-            return substr($value, 0, -2);
-        }
-
-        if (str_ends_with($value, "\n") || str_ends_with($value, "\r")) {
-            return substr($value, 0, -1);
-        }
-
-        return $value;
-    }
-
-    private function newKey(string $cnfPath): \OpenSSLAsymmetricKey
-    {
-        $key = openssl_pkey_new([
-            'private_key_bits' => 2048,
-            'private_key_type' => OPENSSL_KEYTYPE_RSA,
-            'config' => $cnfPath,
-        ]);
-
-        if ($key === false) {
-            throw new \RuntimeException('Key generation failed.');
-        }
-
-        return $key;
+        return [
+            'rootCaPath' => $rootCaPath,
+            'signerCertPath' => $userCertPath,
+            'keyPath' => $keyPath,
+            'passphrasePath' => $passphrasePath,
+            'reusedSharedMaterial' => ! $material->freshlyCreated,
+        ];
     }
 
     /**
@@ -511,7 +320,7 @@ CNF;
         // Exclusive create: never overwrite a file this run did not create.
         $handle = @fopen($path, 'x');
         if ($handle === false) {
-            throw new \RuntimeException('Refusing to overwrite an existing file.');
+            throw IssuanceException::of(IssuanceFailureCode::ARTEFACT_UNSAFE);
         }
 
         $createdFiles[] = $path;
@@ -519,7 +328,7 @@ CNF;
         fclose($handle);
 
         if ($written !== strlen($contents)) {
-            throw new \RuntimeException('Incomplete write of generated material.');
+            throw IssuanceException::of(IssuanceFailureCode::ARTEFACT_UNSAFE);
         }
     }
 

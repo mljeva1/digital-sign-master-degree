@@ -5,8 +5,28 @@
         ['key' => 'dashboard', 'label' => 'Dashboard', 'route' => 'dashboard'],
         ['key' => 'contracts', 'label' => 'Ugovori', 'route' => 'contracts.index'],
         ['key' => 'documents', 'label' => 'Dokumenti', 'route' => 'documents.index'],
+        ['key' => 'certificate', 'label' => 'Certifikat', 'route' => 'certificate-requests.index'],
         ['key' => 'profile', 'label' => 'Profil', 'route' => 'profile.edit'],
     ];
+
+    // The operator inbox link is shown ONLY to an exact certificate_operator; the
+    // route is additionally protected by role middleware, a policy, and a locked
+    // service re-check — a hidden link is never authorization. The membership read
+    // is guarded ONLY against the specific missing-role-schema case some
+    // hand-built partial-schema test renders produce (a QueryException), so the
+    // shared layout never hard-depends on the role tables; any other error still
+    // surfaces normally.
+    $showOperatorLink = false;
+    if (auth()->check()) {
+        try {
+            $showOperatorLink = auth()->user()->hasRole('certificate_operator');
+        } catch (\Illuminate\Database\QueryException) {
+            $showOperatorLink = false; // role tables absent in this render context
+        }
+    }
+    if ($showOperatorLink) {
+        $items[] = ['key' => 'certificate-operator', 'label' => 'Certifikati — operater', 'route' => 'certificate-operator.requests.index'];
+    }
 
     $linkBase = 'rounded-xl px-3.5 py-2 text-sm font-medium transition min-h-[44px] inline-flex items-center';
     $linkIdle = 'text-slate-300 hover:bg-white/5 hover:text-white';

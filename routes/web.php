@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CertificateOperatorRequestController;
+use App\Http\Controllers\CertificateRequestController;
 use App\Http\Controllers\ContractController;
 use App\Http\Controllers\ContractSignatureController;
 use App\Http\Controllers\DocumentController;
@@ -156,6 +158,43 @@ Route::middleware('auth')->group(function () {
     Route::get('/vehicle-catalog/search', [VehicleCatalogController::class, 'search'])
         ->middleware('throttle:60,1')
         ->name('vehicle-catalog.search');
+});
+
+// M14 — certificate requests (subject-facing). Every action is additionally
+// authorized by CertificateRequestPolicy; the subject is always the
+// authenticated user and is never taken from the payload.
+Route::middleware('auth')->group(function () {
+    Route::get('/certificate-requests', [CertificateRequestController::class, 'index'])
+        ->name('certificate-requests.index');
+
+    Route::post('/certificate-requests', [CertificateRequestController::class, 'store'])
+        ->middleware('throttle:6,1')
+        ->name('certificate-requests.store');
+
+    Route::get('/certificate-requests/{certificateRequest}', [CertificateRequestController::class, 'show'])
+        ->name('certificate-requests.show');
+
+    Route::patch('/certificate-requests/{certificateRequest}/cancel', [CertificateRequestController::class, 'cancel'])
+        ->name('certificate-requests.cancel');
+});
+
+// M14 — operator inbox. Role middleware is the first gate, the policy the
+// second, and the workflow service re-proves the operator role under its lock.
+// `admin` alone grants nothing here.
+Route::middleware(['auth', 'role:certificate_operator'])->group(function () {
+    Route::get('/certificate-operator/requests', [CertificateOperatorRequestController::class, 'index'])
+        ->name('certificate-operator.requests.index');
+
+    Route::get('/certificate-operator/requests/{certificateRequest}', [CertificateOperatorRequestController::class, 'show'])
+        ->name('certificate-operator.requests.show');
+
+    Route::post('/certificate-operator/requests/{certificateRequest}/approve', [CertificateOperatorRequestController::class, 'approve'])
+        ->middleware('throttle:12,1')
+        ->name('certificate-operator.requests.approve');
+
+    Route::post('/certificate-operator/requests/{certificateRequest}/reject', [CertificateOperatorRequestController::class, 'reject'])
+        ->middleware('throttle:12,1')
+        ->name('certificate-operator.requests.reject');
 });
 
 Route::middleware(['auth', 'role:admin'])->group(function () {

@@ -8,12 +8,14 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 final class Certificate extends Model
 {
     use HasFactory;
 
     public const OWNER_TYPE_USER = 'user';
+
     public const OWNER_TYPE_CUSTOMER = 'customer';
 
     protected $guarded = [
@@ -47,6 +49,15 @@ final class Certificate extends Model
     public function signatures(): HasMany
     {
         return $this->hasMany(Signature::class);
+    }
+
+    /**
+     * M14: the request this certificate was issued for, if any.
+     * One-to-one in practice — certificate_requests.certificate_id is unique.
+     */
+    public function certificateRequest(): HasOne
+    {
+        return $this->hasOne(CertificateRequest::class, 'certificate_id');
     }
 
     public function isOwnedByUser(): bool

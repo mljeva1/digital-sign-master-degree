@@ -18,16 +18,16 @@ use Throwable;
  * It drives the actual testing:prepare-postgres command with the real
  * LiveDatabaseNameResolver, having pointed the pgsql_test connection's `url`
  * (the same property PG_TEST_URL feeds in config/database.php) at the SAME
- * physical database the development connection resolves to. Only the migrator is
- * a spy, so the real resolver runs a read-only SELECT current_database() over
- * the URL-overridden connection and the guard must refuse before any migration.
+ * physical database the DEVELOPMENT IDENTITY (`pgsql_development`) resolves to.
+ * Only the migrator is a spy, so the real resolver runs a read-only SELECT
+ * current_database() over the URL-overridden connection and the guard must refuse
+ * before any migration.
  *
- * Note on the harness: phpunit.xml forces DB_DATABASE=:memory:, which makes the
- * env-driven `pgsql` (development) connection unreachable during tests, while
- * `pgsql_test` stays reachable because its database is a literal _test name.
- * So this test first reaches a real local PostgreSQL through pgsql_test, then
- * points the development connection at that same reachable physical database to
- * have a genuine development target to compare against. Everything is read-only
+ * Note on the harness: the development identity is the dedicated `pgsql_development`
+ * connection (P2-5), whose database is a literal name (not the phpunit-forced
+ * :memory:), so it is reachable read-only during tests. This test points the TEST
+ * connection's `url` at that development database to model a malicious PG_TEST_URL,
+ * and the guard must catch the equality before any write. Everything is read-only
  * (current_database()) and the migrator is a spy — nothing is ever migrated.
  *
  * Skips ONLY when the PostgreSQL opt-in is off or a safe local PostgreSQL
@@ -42,57 +42,50 @@ final class PrepareTestPostgresUrlOverrideIntegrationTest extends TestCase
         }
 
         if (config('database.connections.pgsql_test.driver') !== 'pgsql'
-            || config('database.connections.pgsql.driver') !== 'pgsql') {
-            $this->markTestSkipped('Both pgsql and pgsql_test must be PostgreSQL connections.');
+            || config('database.connections.pgsql_development.driver') !== 'pgsql') {
+            $this->markTestSkipped('Both pgsql_test and pgsql_development must be PostgreSQL connections.');
         }
 
-        // Reach a real local PostgreSQL through the pgsql_test base config (its
-        // database is a literal _test name + real host/user/pass), read-only.
+        // Read the DEVELOPMENT database name from the real development identity
+        // (pgsql_development), read-only.
         try {
-            $physicalDatabase = (string) DB::connection('pgsql_test')->selectOne('select current_database() as db')->db;
+            $developmentDatabase = (string) DB::connection('pgsql_development')->selectOne('select current_database() as db')->db;
         } catch (Throwable) {
             $this->markTestSkipped('A safe local PostgreSQL connection is not available.');
         }
 
-        if ($physicalDatabase === '') {
+        if ($developmentDatabase === '') {
             $this->markTestSkipped('Could not resolve a local PostgreSQL database name.');
         }
 
-        $base = (array) config('database.connections.pgsql_test');
-        $host = (string) ($base['host'] ?? '127.0.0.1');
-        $port = (string) ($base['port'] ?? '5432');
-        $username = (string) ($base['username'] ?? '');
-        $password = (string) ($base['password'] ?? '');
+        // Build a malicious PG_TEST_URL that lands the TEST connection on the
+        // DEVELOPMENT database, using the development connection's real host/creds.
+        $dev = (array) config('database.connections.pgsql_development');
+        $host = (string) ($dev['host'] ?? '127.0.0.1');
+        $port = (string) ($dev['port'] ?? '5432');
+        $username = (string) ($dev['username'] ?? '');
+        $password = (string) ($dev['password'] ?? '');
 
         $auth = $username !== ''
             ? ($password !== '' ? rawurlencode($username).':'.rawurlencode($password).'@' : rawurlencode($username).'@')
             : '';
-        $url = "pgsql://{$auth}{$host}:{$port}/{$physicalDatabase}";
+        $url = "pgsql://{$auth}{$host}:{$port}/{$developmentDatabase}";
 
         // Snapshot the original configuration so the test is fully hermetic and
         // cannot leak an overridden connection into any later test.
-        $originalPgsqlUrl = config('database.connections.pgsql.url');
-        $originalPgsqlDatabase = config('database.connections.pgsql.database');
         $originalTestUrl = config('database.connections.pgsql_test.url');
 
-        // Point the DEVELOPMENT connection at that same reachable physical
-        // database (only its database name is overridden; real host/creds stay),
-        // and drive the TEST connection there via its `url` property.
-        config([
-            'database.connections.pgsql.url' => null,
-            'database.connections.pgsql.database' => $physicalDatabase,
-            'database.connections.pgsql_test.url' => $url,
-        ]);
-        DB::purge('pgsql');
+        // Drive the TEST connection at the development database via its `url`.
+        config(['database.connections.pgsql_test.url' => $url]);
         DB::purge('pgsql_test');
 
         try {
-            // Precondition (read-only): the REAL resolver sees both connections
-            // land on the same physical database.
-            $devResolved = (string) DB::connection('pgsql')->selectOne('select current_database() as db')->db;
+            // Precondition (read-only): the REAL resolver sees the target land on
+            // the same physical database the development identity resolves to.
+            $devResolved = (string) DB::connection('pgsql_development')->selectOne('select current_database() as db')->db;
             $targetResolved = (string) DB::connection('pgsql_test')->selectOne('select current_database() as db')->db;
-            $this->assertSame($physicalDatabase, $devResolved, 'Precondition: development must resolve to the shared physical database.');
-            $this->assertSame($physicalDatabase, $targetResolved, 'Precondition: the URL override must land pgsql_test on the shared physical database.');
+            $this->assertSame($developmentDatabase, $devResolved, 'Precondition: the development identity resolves to the development database.');
+            $this->assertSame($developmentDatabase, $targetResolved, 'Precondition: the URL override must land pgsql_test on the development database.');
 
             // Only the migrator is faked; the resolver stays real.
             $spy = new SpyTestSchemaMigrator;
@@ -103,14 +96,8 @@ final class PrepareTestPostgresUrlOverrideIntegrationTest extends TestCase
         } finally {
             // Fully restore: purge, put the original config back, purge again so
             // no rebuilt connection retains the test override.
-            DB::purge('pgsql');
             DB::purge('pgsql_test');
-            config([
-                'database.connections.pgsql.url' => $originalPgsqlUrl,
-                'database.connections.pgsql.database' => $originalPgsqlDatabase,
-                'database.connections.pgsql_test.url' => $originalTestUrl,
-            ]);
-            DB::purge('pgsql');
+            config(['database.connections.pgsql_test.url' => $originalTestUrl]);
             DB::purge('pgsql_test');
         }
 

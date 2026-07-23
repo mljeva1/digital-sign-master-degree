@@ -89,9 +89,66 @@ otisak** potpisnog certifikata (digest, ne tajna).
 - Certificate ambiguity (2+ aktivna) → fail-closed, bez gumba, bez metadata.
 - Nikad ne tvrditi PAdES/eIDAS/QES/AdES/QSCD/QTSP, pravnu valjanost ni non-repudiation.
 
+## Certificate request and controlled issuance (M14)
+
+M14 razdvaja **traženje** certifikata od **izdavanja**. Korisnik podnese zahtjev,
+`certificate_operator` odobri, approval atomski (isti `database` queue, isti connection,
+`after_commit=false`) upiše jedan issuance job, a **dedicated worker**
+(`queue:work database --queue=certificate-issuance --tries=3`) izda per-user leaf certifikat.
+
+- **Zajednički servis, dvije sposobnosti:** `LocalSignerCertificateIssuanceService` dijeli
+  per-user leaf issuance između provisioning naredbe i workera. Samo naredba smije
+  bootstrapati/oporaviti Root CA + ključeve + passphrase; worker izdaje **isključivo** iz
+  postojećeg, strukturno potvrđenog roota i fail-closed odbija nepotpun/nesiguran/nevaljan root.
+- **Attempt-owned artefakt + ownership (P2-2):** worker claima leaf **exclusive-create**
+  putanjom izvedenom iz request ID-a i attempt UUID-a unutar potvrđenog roota. Rezultat je
+  `AttemptCertificateArtifact` (path samo interno, `created_by_current_invocation`). Pobjednik
+  (created=true) smije kasnije cleanupati **samo** nakon re-provjere iste putanje i istog
+  content-hasha; gubitnik create-utrke (created=false) re-validira i **ponovno koristi**
+  pobjednikov certifikat i **nikad** ga ne briše. Djelomično zapisan artefakt → transient retry
+  bez unlinka; nevaljan/nesiguran postojeći artefakt → fail-closed bez prepisivanja/brisanja.
+- **Per-file shared-material safety (P2-4):** svaka od četiri shared datoteke (Root CA cert, Root
+  CA key, signer key, passphrase) prolazi zasebnu fail-closed provjeru neposredno prije čitanja
+  (allow-listed basename, canonical parent unutar potvrđenog roota, bez symlink/junction/reparse,
+  regularna datoteka dokazana `lstat` i post-open `fstat`), pa tek onda čita iz otvorenog handlea.
+- **Transient vs permanent (P2-3):** jedan zatvoreni `TransientDatabaseFailureClassifier` prolazi
+  cijeli exception chain (uklj. `getPrevious()`, `QueryException`/`PDOException`, `errorInfo[0]`) i
+  transient su **samo** SQLSTATE `40001`/`40P01`/`55P03` te dopušteni SQLite „database is locked".
+  Registrar zadržava original u `previous` chainu (raw poruka nikad ne ide u DB/audit/UI/session).
+- **Exact queue connection (P2-6):** `IssueCertificateJob` je pinan na
+  `onConnection('database')` + `onQueue('certificate-issuance')`; `IssuanceQueueContract` provjerava
+  **točno** `queue.connections.database` (driver `database`, isti domain/fizički connection,
+  `after_commit=false`), nikad „bilo koji database-driver connection" ni `queue.default`.
+- **Atomski completion seam:** `SignerCertificateRegistrar` unutar iste persistence transakcije
+  kao `StoredFile` + `Certificate` fresh-locka `CertificateRequest`, re-dokaže exact
+  request/attempt/user/state, veže `certificate_id`, prebaci `issuing → issued` i upiše
+  `certificate.issuance.completed`. Nema commitanog `Certificate` bez dovršenog bindinga, ni
+  `issued` zahtjeva bez valjanog `Certificate`. Isti seam vrijedi i na exact-fingerprint
+  idempotent recovery putu.
+- **Root CA key granica:** učitavaju ga samo bootstrap naredba, worker i njihov zajednički
+  servis — nikad HTTP/Form Request/Blade/CMS document-signing/javna provjera/queue serializer/
+  audit/logger, i nije `config/signing.php` runtime opcija.
+- **Audit (`certificate.issuance.started|completed|failed`):** actor je konkretni operater
+  (`reviewed_by_user_id`), `failed` je `success=false`, metadata je stroga allow-lista bez
+  napomene, PII-ja, DN-a, seriala, attempt UUID-a, putanje, PEM-a ni raw errora.
+- **Failure/retry:** trajni failure → terminalni `failed` samo iz `issuing`, stabilni
+  `failure_code`, bez raw errora; prolazni lock/deadlock → retry istog attempta bez terminalnog
+  zapisa; iscrpljeni retryji → `ISSUANCE_RETRIES_EXHAUSTED`.
+
+**M14 nije** produkcijski CA, QTSP, PAdES, eIDAS, QES, QSCD, kvalificirani certifikat, pravno
+valjan potpis ni non-repudiation — to je lokalni akademski PKI tok.
+
 ## Poznata ograničenja (P3)
 
 - Stvarni paralelni PostgreSQL race test nije izveden (vidi [testing.md](testing.md)).
 - Concurrent filesystem-swap TOCTOU residual; Windows ACL nad signing rootom; `serve => true`
   storage ruta bez temporary URL-a; shared local-test key (namjerno); provisioning-only CA
   key na disku; stari `dsmd-dev-signer` cleanup. Sve namjerno izvan M13 scopea.
+- **M14:** hard-crash nakon zapisa attempt/leaf datoteke a prije DB commita može ostaviti orphan
+  javnog certificate artefakta (create-only, attempt-owned putanja) — P3 residual za budući
+  reconciliation scan; ne može proizvesti lažni `issued` ni drugi `Certificate`. Dublji
+  dvo-konekcijski PostgreSQL worker-race dokaz **nije izvršen** u ovom prolazu. Random serial nema
+  trajnu **attempt→fingerprint provenance** vezu, a globalni exact-fingerprint recovery nema
+  eksplicitnu **request provenance** vezu — oboje ostaju **P3** (bez nove DB provenance migracije);
+  ownership cleanup (P2-2) svejedno jamči da gubitnik nikad ne briše pobjednikov artefakt.
+  Windows ACL/process-isolation temp/artefakt residual ostaje P3.

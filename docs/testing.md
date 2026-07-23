@@ -10,8 +10,10 @@ dira razvojni PostgreSQL.
 php artisan test
 ```
 
-Auditirani baseline (M13, na feature grani):
-**683 tests / 669 passed / 3489 assertions / 14 skipped / 0 failed.**
+Zadnji stabilni run (M14 P2 re-audit correction ciklus — classifier connection-resolution + winner lock/write/flush korekcije, na feature grani):
+**834 tests / 797 passed / 4116 assertions / 37 skipped / 0 failed.**
+
+> Povijesni M13 baseline (samo za usporedbu, **nije** aktualan): 683 / 669 / 3489 / 14.
 
 Ciljane signing suite:
 
@@ -20,14 +22,19 @@ php artisan test tests/Feature/Signing
 php artisan test tests/Unit/Signing
 ```
 
-### Skip composition (14)
+### Skip composition (37)
 
-- **12** — PostgreSQL opt-in metode u `SignatureSourceBindingSchemaTest` (skipane u default
-  SQLite runu jer je izolirana PG test baza opt-in; vidi niže).
-- **1** — `PG_TEST_URL` safety integration
-  (`PrepareTestPostgresUrlOverrideIntegrationTest`), isti PostgreSQL opt-in uvjet.
-- **1** — Windows directory-symlink test (`symlink()` je neprivilegiran na hostu). Windows
-  junction ekvivalent **prolazi** i nije skipped.
+- **32** — PostgreSQL opt-in metode (skipane u default SQLite runu jer je izolirana PG test
+  baza opt-in; vidi niže):
+  - **17** — M14 `certificate_requests` schema/constraint proofs (`CertificateRequestSchemaPostgresTest`);
+  - **12** — M13 signature source-binding schema proofs (`SignatureSourceBindingSchemaTest`);
+  - **2** — M14 operator revoke concurrency proofs (`CertificateOperatorRevokeConcurrencyPostgresTest`);
+  - **1** — `PG_TEST_URL` safety integration (`PrepareTestPostgresUrlOverrideIntegrationTest`).
+- **4** — Windows file-symlink testovi (P2-4 shared-material safety, `LocalSignerIssuanceServiceTest`):
+  `symlink()` traži privilegiju na hostu; test se **precizno** skipa samo tada.
+- **1** — `SigningTempWorkspace` reparse primitive test (platform).
+
+Windows **junction** (directory) ekvivalenti **prolaze** i nisu skipped.
 
 Granice dokaza: SQLite ne dokazuje PostgreSQL regex CHECK, JSONB, sve FK/UNIQUE definicije,
 partial unique indekse ni migracijske batcheve. Za takve tvrdnje koristi PG opt-in suite ili
@@ -122,8 +129,12 @@ $env:DB_PG_TEST_ENABLED = 'true'
 $env:DB_PG_TEST_CONNECTION = 'pgsql_test'
 $env:PG_DEVELOPMENT_DATABASE = 'digital_sign_master_degree'
 
-# 3. Combined opt-in PostgreSQL run.
-php artisan test tests/Feature/SignatureSourceBindingSchemaTest.php tests/Feature/Testing/PrepareTestPostgresUrlOverrideIntegrationTest.php
+# 3. Puni fizički PostgreSQL set (32 testa) — isti redoslijed kao stvarni uspješni run.
+php artisan test `
+  tests/Feature/CertificateRequests/CertificateRequestSchemaPostgresTest.php `
+  tests/Feature/CertificateRequests/CertificateOperatorRevokeConcurrencyPostgresTest.php `
+  tests/Feature/SignatureSourceBindingSchemaTest.php `
+  tests/Feature/Testing/PrepareTestPostgresUrlOverrideIntegrationTest.php
 
 # 4. Ukloni privremene varijable.
 Remove-Item Env:DB_PG_TEST_ENABLED -ErrorAction SilentlyContinue
@@ -136,7 +147,11 @@ Bash alternativa (zasebno, ne miješati s PowerShell sintaksom):
 ```bash
 php artisan testing:prepare-postgres
 DB_PG_TEST_ENABLED=true DB_PG_TEST_CONNECTION=pgsql_test PG_DEVELOPMENT_DATABASE=digital_sign_master_degree \
-  php artisan test tests/Feature/SignatureSourceBindingSchemaTest.php tests/Feature/Testing/PrepareTestPostgresUrlOverrideIntegrationTest.php
+  php artisan test \
+    tests/Feature/CertificateRequests/CertificateRequestSchemaPostgresTest.php \
+    tests/Feature/CertificateRequests/CertificateOperatorRevokeConcurrencyPostgresTest.php \
+    tests/Feature/SignatureSourceBindingSchemaTest.php \
+    tests/Feature/Testing/PrepareTestPostgresUrlOverrideIntegrationTest.php
 ```
 
 > **Ne pokreći** `php artisan migrate --database=pgsql_test --force` izravno. Direktna
@@ -144,14 +159,25 @@ DB_PG_TEST_ENABLED=true DB_PG_TEST_CONNECTION=pgsql_test PG_DEVELOPMENT_DATABASE
 > migrirati razvojnu bazu prije nego što je test-class gate odbije. `testing:prepare-postgres`
 > zatvara taj write-before-gate prozor.
 
-Očekivano (combined opt-in run): **13 passed / 49 assertions / 0 skipped / 0 failed** (12
-schema proofs + 1 `PG_TEST_URL` safety integration). Tijekom izvršenja opaženi zaštićeni row
-countovi i provjereni Signature/certificate/file bindingi u razvojnoj bazi ostaju
-nepromijenjeni (read-only brojanje redaka prije/poslije). **Ova provjera nije fizički
-byte-level dokaz identičnosti cijele baze.** Nakon runa test baza ostaje s praznim domenskim
-tablicama (samo `migrations` popunjen); može ostati ili se kontrolirano obrisati.
+Puni aktualni PostgreSQL opt-in set = **32 metode** nad stvarnom `pgsql_test` bazom:
+**17** M14 `certificate_requests` schema/constraint proofs, **2** M14 operator revoke concurrency
+proofs, **12** M13 signature source-binding schema proofs, **1** `PG_TEST_URL` safety integration.
+Obje strane (target `pgsql_test`, development identitet `pgsql_development`) razrješavaju stvarni
+`SELECT current_database()` prije bilo kakve migracije/transakcije/fixture writea.
 
-> Ne miješaj brojeve: zasebni PG run (12) **ne** zbraja se s default full-suite brojem.
+> **Izvršeni fizički PostgreSQL run (M14 P2 ciklus):** `DB_PG_TEST_ENABLED=true`, target
+> `pgsql_test` = `digital_sign_master_degree_test`, development identitet `pgsql_development` =
+> `digital_sign_master_degree` (različite baze, stvarni `SELECT current_database()` na obje prije
+> writea). `testing:prepare-postgres` prošao preflight i forward-only migrirao **samo** `pgsql_test`.
+> Puni set: **32 tests / 32 passed / 126 assertions / 0 skipped / 0 failed.** **Nema** fizičkog
+> PostgreSQL **two-worker** issuance/completion dokaza — to ostaje P3 (niže); ovih 32 su schema
+> constraint, operator revoke concurrency, source-binding i URL-safety dokazi.
+
+Tijekom fizičkog runa razvojna baza ostaje read-only (nijedan write); nakon runa `pgsql_test`
+ostaje s praznim domenskim tablicama (test fixture retci koje je run stvorio su očišćeni). **Ovo
+nije** fizički byte-level dokaz identičnosti cijele baze.
+
+> Ne miješaj brojeve: zasebni PG run (32) **ne** zbraja se s default full-suite brojem.
 
 ## PostgreSQL concurrency (P3 — odgođeno)
 
@@ -164,6 +190,33 @@ dokazan na PostgreSQL-u kroz tri metode ove suite (second-pending, completed-whe
 second-completed). Aplikacijski lock/idempotency pokriveni su feature testovima s
 determinističkim seamovima. Paralelni PG race ostaje preporučeni (P3) dokaz i ne smije se
 predstavljati postojećim lock/idempotency testovima.
+
+## M14 issuance worker (SQLite harness)
+
+M14 Phase B lifecycle testira se kroz izolirani SQLite harness koji **relocira storage** u
+per-test temp direktorij i bootstrapa **stvarni** lokalni signing root, pa worker izvodi pravu
+native-OpenSSL emisiju bez dodirivanja razvojnog signing materijala:
+
+- `tests/Feature/CertificateRequests/CertificateIssuanceWorkerTest.php` — happy path
+  (approved → issuing → issued, atomsko vezanje, started/completed audit), fail-closed bez
+  signing roota, idempotentni duplicate delivery (jedan `Certificate`), active-certificate race,
+  dva korisnika → dva certifikata iz jednog signer ključa, terminal `failed` se ne reprocesira,
+  `ISSUANCE_RETRIES_EXHAUSTED`.
+- `tests/Feature/CertificateRequests/LocalSignerIssuanceServiceTest.php` — worker nikad ne
+  bootstrapa/oporavlja materijal, create-only + retry reuse attempt artefakta, ownership-scoped
+  cleanup, leaf profil (CA:FALSE, digitalSignature, bez PII-ja).
+- `tests/Feature/Signing/SignerCertificateRegistrarTest.php` — completion seam: atomski commit,
+  verbatim rollback na neuspjeh seama, `recovered=true` na exact-fingerprint idempotent putu.
+
+Dedicated worker se u praksi pokreće tek nakon pune M14 implementacije:
+
+```powershell
+php artisan queue:work database --queue=certificate-issuance --tries=3
+```
+
+`certificate-issuance` je zaseban queue; default listener / `composer dev` ga ne konzumiraju,
+pa globalno queue ponašanje ostaje nepromijenjeno. Dublji dvo-konekcijski PostgreSQL worker-race
+dokaz ostaje **P3** (nije dodan u ovom prolazu).
 
 ## Quality gates
 

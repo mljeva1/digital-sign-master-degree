@@ -8,11 +8,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-
-use App\Models\Role;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
@@ -32,6 +29,7 @@ class User extends Authenticatable
     protected $guarded = [
         'id',
     ];
+
     protected $hidden = [
         'password',
         'remember_token',
@@ -77,6 +75,18 @@ class User extends Authenticatable
     public function signedSignatures(): HasMany
     {
         return $this->hasMany(Signature::class, 'signed_user_id');
+    }
+
+    /** M14: certificate requests this user submitted for themselves. */
+    public function certificateRequests(): HasMany
+    {
+        return $this->hasMany(CertificateRequest::class, 'user_id');
+    }
+
+    /** M14: certificate requests this user reviewed as a certificate_operator. */
+    public function reviewedCertificateRequests(): HasMany
+    {
+        return $this->hasMany(CertificateRequest::class, 'reviewed_by_user_id');
     }
 
     public function auditEvents(): HasMany

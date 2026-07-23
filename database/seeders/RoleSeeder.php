@@ -30,6 +30,13 @@ class RoleSeeder extends Seeder
                 'display_name' => 'Zaposlenik',
                 'description' => 'Korisnik koji koristi poslovne funkcionalnosti sustava.',
             ],
+            [
+                // M14: reviews certificate requests. Deliberately separate from
+                // admin/employee — neither of those grants operator access.
+                'name' => 'certificate_operator',
+                'display_name' => 'Operator certifikata',
+                'description' => 'Korisnik koji pregledava i odobrava zahtjeve za certifikat.',
+            ],
         ];
 
         foreach ($roles as $role) {

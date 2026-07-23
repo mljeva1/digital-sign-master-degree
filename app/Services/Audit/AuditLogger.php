@@ -67,7 +67,8 @@ final class AuditLogger
         ?Contract $contract = null,
         array $metadata = [],
         ?Model $auditable = null,
-        ?int $actorUserId = null
+        ?int $actorUserId = null,
+        bool $success = true
     ): AuditEvent {
         $entity = $auditable ?? $contract;
 
@@ -81,7 +82,7 @@ final class AuditLogger
             'action' => $event,
             'entity_type' => class_basename($entity),
             'entity_id' => $entity->getKey(),
-            'success' => true,
+            'success' => $success,
             'ip_address' => app()->bound('request') ? request()->ip() : null,
             'user_agent' => app()->bound('request') ? request()->userAgent() : null,
             'metadata' => $this->sanitizeMetadata($metadata),

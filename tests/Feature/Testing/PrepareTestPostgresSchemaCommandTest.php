@@ -33,7 +33,7 @@ final class PrepareTestPostgresSchemaCommandTest extends TestCase
     public function test_safe_configuration_passes_preflight_and_migrates_the_test_connection(): void
     {
         $spy = new SpyTestSchemaMigrator;
-        $this->bind(['pgsql' => self::DEV_DB, 'pgsql_test' => self::TEST_DB], $spy);
+        $this->bind(['pgsql_development' => self::DEV_DB, 'pgsql_test' => self::TEST_DB], $spy);
 
         $exit = Artisan::call('testing:prepare-postgres');
 
@@ -44,7 +44,7 @@ final class PrepareTestPostgresSchemaCommandTest extends TestCase
     public function test_target_equal_to_development_database_fails_before_migration(): void
     {
         $spy = new SpyTestSchemaMigrator;
-        $this->bind(['pgsql' => self::DEV_DB, 'pgsql_test' => self::DEV_DB], $spy);
+        $this->bind(['pgsql_development' => self::DEV_DB, 'pgsql_test' => self::DEV_DB], $spy);
 
         $exit = Artisan::call('testing:prepare-postgres');
         $output = Artisan::output();
@@ -61,7 +61,7 @@ final class PrepareTestPostgresSchemaCommandTest extends TestCase
     public function test_target_without_test_marker_fails_before_migration(): void
     {
         $spy = new SpyTestSchemaMigrator;
-        $this->bind(['pgsql' => self::DEV_DB, 'pgsql_test' => 'production_like_db'], $spy);
+        $this->bind(['pgsql_development' => self::DEV_DB, 'pgsql_test' => 'production_like_db'], $spy);
 
         $exit = Artisan::call('testing:prepare-postgres');
 
@@ -74,7 +74,7 @@ final class PrepareTestPostgresSchemaCommandTest extends TestCase
         // A PG_TEST_URL / DSN override pointing at dev is caught because the LIVE
         // current_database() of the test connection comes back as the dev name.
         $spy = new SpyTestSchemaMigrator;
-        $this->bind(['pgsql' => self::DEV_DB, 'pgsql_test' => self::DEV_DB], $spy);
+        $this->bind(['pgsql_development' => self::DEV_DB, 'pgsql_test' => self::DEV_DB], $spy);
 
         $exit = Artisan::call('testing:prepare-postgres');
 
@@ -87,7 +87,7 @@ final class PrepareTestPostgresSchemaCommandTest extends TestCase
         config(['database.connections.pgsql_test.driver' => 'mysql']);
 
         $spy = new SpyTestSchemaMigrator;
-        $this->bind(['pgsql' => self::DEV_DB, 'pgsql_test' => self::TEST_DB], $spy);
+        $this->bind(['pgsql_development' => self::DEV_DB, 'pgsql_test' => self::TEST_DB], $spy);
 
         $exit = Artisan::call('testing:prepare-postgres');
 
@@ -99,7 +99,7 @@ final class PrepareTestPostgresSchemaCommandTest extends TestCase
     {
         $spy = new SpyTestSchemaMigrator;
         $this->bind([
-            'pgsql' => self::DEV_DB,
+            'pgsql_development' => self::DEV_DB,
             'pgsql_test' => new \RuntimeException('could not connect'),
         ], $spy);
 
@@ -114,7 +114,7 @@ final class PrepareTestPostgresSchemaCommandTest extends TestCase
         $this->app['env'] = 'production';
 
         $spy = new SpyTestSchemaMigrator;
-        $this->bind(['pgsql' => self::DEV_DB, 'pgsql_test' => self::TEST_DB], $spy);
+        $this->bind(['pgsql_development' => self::DEV_DB, 'pgsql_test' => self::TEST_DB], $spy);
 
         $exit = Artisan::call('testing:prepare-postgres');
 
@@ -129,11 +129,11 @@ final class PrepareTestPostgresSchemaCommandTest extends TestCase
         config([
             'database.connections.pgsql_test.password' => 'super-secret-pw',
             'database.connections.pgsql_test.username' => 'local_pg_user',
-            'database.connections.pgsql.password' => 'super-secret-pw',
+            'database.connections.pgsql_development.password' => 'super-secret-pw',
         ]);
 
         $spy = new SpyTestSchemaMigrator;
-        $this->bind(['pgsql' => self::DEV_DB, 'pgsql_test' => self::TEST_DB], $spy);
+        $this->bind(['pgsql_development' => self::DEV_DB, 'pgsql_test' => self::TEST_DB], $spy);
 
         Artisan::call('testing:prepare-postgres');
         $output = Artisan::output();
